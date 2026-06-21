@@ -31,6 +31,17 @@
 </head>
 <body>
 
+    {# Кинематографический фон: position:fixed, z-index:0.
+       Виден на ВСЕХ страницах сайта через единый класс page-hero-background.
+       Слайд-шоу запускается JS ниже, до bootstrap.bundle. #}
+    <div class="page-hero-background">
+        <div class="hero-bg hero-bg-1 is-active"></div>
+        <div class="hero-bg hero-bg-2"></div>
+        <div class="hero-bg hero-bg-3"></div>
+        <div class="hero-bg hero-bg-4"></div>
+        <div class="hero-overlay"></div>
+    </div>
+
     {# ── Шапка сайта ─────────────────────────── #}
     <header class="site-header">
         <div class="container">
@@ -67,6 +78,21 @@
        bundle.min.js включает Popper.js — нужен для выпадающих меню и tooltip'ов. #}
     <script
         src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js">
+    </script>
+
+    {# Слайд-шоу фона: общий для всех страниц.
+       Каждые 13 сек переключает is-active между .hero-bg слайдами.
+       CSS transition:opacity 1.5s делает плавный fade. #}
+    <script>
+    (function () {
+        const slides = document.querySelectorAll('.hero-bg');
+        let current = 0;
+        setInterval(function () {
+            slides[current].classList.remove('is-active');
+            current = (current + 1) % slides.length;
+            slides[current].classList.add('is-active');
+        }, 13000);
+    }());
     </script>
 
     {# Блок для страничного JS — каждый шаблон может добавить свои скрипты сюда. #}

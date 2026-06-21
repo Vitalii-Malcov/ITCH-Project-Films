@@ -189,37 +189,57 @@ def search_movies_by_title(keyword, limit=10, offset=0):
     return movies
 
 
-def search_movies_by_genre(genre_name, limit=10, offset=0):
+def search_movies_by_genre(genre_name, year_from=None, year_to=None,
+                           limit=10, offset=0):
     """
     Ищет фильмы по точному названию жанра.
-    Возвращает максимум 10 фильмов.
+    Опционально фильтрует по диапазону годов выпуска.
 
     Аргументы:
       genre_name — точное название, например "Action" или "Comedy"
+      year_from  — нижняя граница года (None = без ограничения)
+      year_to    — верхняя граница года (None = без ограничения)
       limit      — максимум результатов (по умолчанию 10)
-      offset     — для будущей пагинации
+      offset     — для пагинации
 
     Возвращает список словарей с теми же полями что search_movies_by_title().
 
-    ЭТАП 5: здесь можно добавить year_from/year_to как доп. WHERE-условия.
+    Примечание: в стандартной базе Sakila все фильмы имеют год 2006,
+    поэтому любой диапазон, включающий 2006, вернёт все фильмы жанра.
     """
     conn   = get_connection()
     cursor = conn.cursor()
 
-    # INNER JOIN (без LEFT) — нам нужны только фильмы с конкретным жанром.
-    # c.name = %s — точное совпадение (не LIKE), регистр важен.
-    query = """
+    # Базовое условие — всегда по жанру.
+    # Год добавляем только если передан — без дублирования кода.
+    # Примечание: conditions содержит только хардкодные строки,
+    # пользовательский ввод передаётся через params (защита от инъекций).
+    conditions = ["c.name = %s"]
+    params     = [genre_name]
+
+    if year_from is not None:
+        conditions.append("f.release_year >= %s")
+        params.append(year_from)
+    if year_to is not None:
+        conditions.append("f.release_year <= %s")
+        params.append(year_to)
+
+    params.extend([limit, offset])
+
+    where_clause = " AND ".join(conditions)
+
+    query = f"""
         SELECT f.film_id, f.title, f.release_year, f.rating, f.length,
                c.name AS genre
         FROM   film f
         JOIN   film_category fc ON f.film_id      = fc.film_id
         JOIN   category      c  ON fc.category_id = c.category_id
-        WHERE  c.name = %s
+        WHERE  {where_clause}
         ORDER  BY f.title
         LIMIT  %s OFFSET %s
     """
 
-    cursor.execute(query, (genre_name, limit, offset))
+    cursor.execute(query, params)
     rows = cursor.fetchall()
 
     cursor.close()

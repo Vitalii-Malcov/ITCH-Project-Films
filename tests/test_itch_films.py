@@ -246,3 +246,143 @@ class TestStatsPage:
 
         recent_items = page.locator(".recent-item")
         assert recent_items.count() > 0, "Последние запросы не отображаются"
+
+    def test_карточка_всего_поисков_кликабельна(self, page: Page):
+        """Карточка 'Всего поисков' — это ссылка на /stats/searches."""
+        page.goto(f"{BASE_URL}/stats")
+
+        link = page.locator("a.stat-card-link[href*='stats/searches']")
+        expect(link).to_be_visible()
+
+        # Проверяем что содержит число и подпись
+        expect(link).to_contain_text("Всего поисков")
+
+    def test_карточка_уникальных_кликабельна(self, page: Page):
+        """Карточка 'Уникальных запросов' — это ссылка на /stats/unique."""
+        page.goto(f"{BASE_URL}/stats")
+
+        link = page.locator("a.stat-card-link[href*='stats/unique']")
+        expect(link).to_be_visible()
+        expect(link).to_contain_text("Уникальных запросов")
+
+
+# ── 7. Детальный список: все поиски ───────────────────────────────
+
+class TestStatsSearches:
+    def test_страница_открывается(self, page: Page):
+        """/stats/searches загружается с таблицей записей."""
+        page.goto(f"{BASE_URL}/stats/searches")
+        expect(page).to_have_title("ITCH Films — Все поиски")
+        expect(page.locator("h1")).to_contain_text("Все поиски")
+        expect(page.locator(".stats-table")).to_be_visible()
+
+    def test_таблица_содержит_строки(self, page: Page):
+        """В таблице есть хотя бы одна запись из MongoDB."""
+        page.goto(f"{BASE_URL}/stats/searches")
+        rows = page.locator(".stats-table tbody tr")
+        assert rows.count() > 0, "Таблица пустая — MongoDB не возвращает данные"
+
+    def test_бейджи_типов_поиска(self, page: Page):
+        """Строки содержат бейджи 🔎 Search или 🎭 Genre."""
+        page.goto(f"{BASE_URL}/stats/searches")
+        badges = page.locator(".recent-type-badge")
+        assert badges.count() > 0, "Бейджи типов поиска не найдены"
+
+    def test_счётчик_записей_в_шапке(self, page: Page):
+        """Бейдж в шапке показывает общее число записей."""
+        page.goto(f"{BASE_URL}/stats/searches")
+        badge_text = page.locator(".stats-db-badge").inner_text()
+        assert "записей" in badge_text, f"Счётчик не найден: '{badge_text}'"
+        # Извлекаем число и проверяем что оно > 0
+        number = badge_text.split()[0]
+        assert number.isdigit() and int(number) > 0
+
+    def test_ссылка_назад_ведёт_на_stats(self, page: Page):
+        """Кнопка «← Статистика» возвращает на /stats."""
+        page.goto(f"{BASE_URL}/stats/searches")
+        page.click("a.stats-back-link")
+        expect(page).to_have_url(f"{BASE_URL}/stats")
+        expect(page.locator("h1")).to_contain_text("MongoDB Analytics")
+
+    def test_клик_по_карточке_открывает_список(self, page: Page):
+        """Клик по карточке 'Всего поисков' на /stats ведёт сюда."""
+        page.goto(f"{BASE_URL}/stats")
+        page.click("a.stat-card-link[href*='stats/searches']")
+        expect(page).to_have_url(f"{BASE_URL}/stats/searches")
+        expect(page.locator(".stats-table")).to_be_visible()
+
+    def test_пагинация_следующие_10(self, page: Page):
+        """Если записей > 10 — кнопка «Следующие 10» видна."""
+        page.goto(f"{BASE_URL}/stats/searches")
+        total_text = page.locator(".stats-db-badge").inner_text().split()[0]
+        total = int(total_text) if total_text.isdigit() else 0
+
+        if total > 10:
+            expect(
+                page.locator("a.pagination-btn:has-text('Следующие 10')")
+            ).to_be_visible()
+        else:
+            # Пагинация не нужна — кнопки нет
+            expect(
+                page.locator("a.pagination-btn:has-text('Следующие 10')")
+            ).not_to_be_visible()
+
+    def test_переход_на_вторую_страницу(self, page: Page):
+        """offset=10 загружает вторую страницу и показывает «Предыдущие 10»."""
+        page.goto(f"{BASE_URL}/stats/searches?offset=10")
+        expect(page.locator(".stats-table")).to_be_visible()
+        expect(
+            page.locator("a.pagination-btn:has-text('Предыдущие 10')")
+        ).to_be_visible()
+
+
+# ── 8. Детальный список: уникальные запросы ───────────────────────
+
+class TestStatsUnique:
+    def test_страница_открывается(self, page: Page):
+        """/stats/unique загружается с таблицей уникальных запросов."""
+        page.goto(f"{BASE_URL}/stats/unique")
+        expect(page).to_have_title("ITCH Films — Уникальные запросы")
+        expect(page.locator("h1")).to_contain_text("Уникальные запросы")
+        expect(page.locator(".stats-table")).to_be_visible()
+
+    def test_таблица_содержит_строки(self, page: Page):
+        """Таблица уникальных запросов не пустая."""
+        page.goto(f"{BASE_URL}/stats/unique")
+        rows = page.locator(".stats-table tbody tr")
+        assert rows.count() > 0, "Таблица пустая"
+
+    def test_колонка_раз_искали(self, page: Page):
+        """Колонка с × count присутствует в строках."""
+        page.goto(f"{BASE_URL}/stats/unique")
+        counts = page.locator(".popular-count")
+        assert counts.count() > 0, "Колонка 'Раз искали' не найдена"
+        # Проверяем формат первого значения: «× N»
+        first = counts.first.inner_text().strip()
+        assert first.startswith("×"), f"Неожиданный формат: '{first}'"
+
+    def test_отсортировано_по_частоте(self, page: Page):
+        """Первый запрос встречается не реже второго (sort count DESC)."""
+        page.goto(f"{BASE_URL}/stats/unique")
+        counts = page.locator(".popular-count")
+        if counts.count() < 2:
+            return  # нечего сравнивать
+
+        first_n  = int(counts.nth(0).inner_text().replace("×", "").strip())
+        second_n = int(counts.nth(1).inner_text().replace("×", "").strip())
+        assert first_n >= second_n, (
+            f"Неверная сортировка: первый={first_n}, второй={second_n}"
+        )
+
+    def test_клик_по_карточке_открывает_список(self, page: Page):
+        """Клик по карточке 'Уникальных запросов' на /stats ведёт сюда."""
+        page.goto(f"{BASE_URL}/stats")
+        page.click("a.stat-card-link[href*='stats/unique']")
+        expect(page).to_have_url(f"{BASE_URL}/stats/unique")
+        expect(page.locator(".stats-table")).to_be_visible()
+
+    def test_ссылка_назад(self, page: Page):
+        """Кнопка «← Статистика» возвращает на /stats."""
+        page.goto(f"{BASE_URL}/stats/unique")
+        page.click("a.stats-back-link")
+        expect(page).to_have_url(f"{BASE_URL}/stats")

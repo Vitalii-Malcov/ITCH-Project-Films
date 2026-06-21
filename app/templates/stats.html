@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}ITCH Films — Статистика{% endblock %}
+
+
+{% block content %}
+
+{# ── Страница аналитики MongoDB ──────────────────────────────────── #}
+{# Переменные из routes.py:
+   popular — топ-5 по количеству: [{"_id": "alien", "count": 7}, ...]
+   recent  — последние 5 записей: [{"search_value": "...", "timestamp": datetime, ...}]
+   total   — общее число поисков (int)
+   unique  — число уникальных запросов (int) #}
+
+<section class="py-5">
+    <div class="container">
+
+        {# ── Hero: заголовок страницы ───────────────────────────── #}
+        <div class="mb-5">
+            <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
+                <h1 class="mb-0">MongoDB Analytics</h1>
+                <span class="stats-db-badge">
+                    <i class="bi bi-database-fill me-1"></i>itch_films_logs
+                </span>
+            </div>
+            <p class="text-secondary mb-0">
+                Статистика поисковых запросов в реальном времени
+            </p>
+        </div>
+
+        {# ── Три сводные карточки ───────────────────────────────── #}
+        <div class="row g-3 mb-5">
+
+            {# Карточка: всего поисков #}
+            <div class="col-12 col-sm-4">
+                <div class="stat-summary-card">
+                    <div class="stat-icon">
+                        <i class="bi bi-search"></i>
+                    </div>
+                    <div class="stat-value">{{ total }}</div>
+                    <div class="stat-label">Всего поисков</div>
+                </div>
+            </div>
+
+            {# Карточка: уникальных запросов #}
+            <div class="col-12 col-sm-4">
+                <div class="stat-summary-card">
+                    <div class="stat-icon">
+                        <i class="bi bi-fingerprint"></i>
+                    </div>
+                    <div class="stat-value">{{ unique }}</div>
+                    <div class="stat-label">Уникальных запросов</div>
+                </div>
+            </div>
+
+            {# Карточка: последний поиск — берём recent[0] если есть #}
+            <div class="col-12 col-sm-4">
+                <div class="stat-summary-card">
+                    <div class="stat-icon">
+                        <i class="bi bi-clock-fill"></i>
+                    </div>
+                    {% if recent %}
+                        <div class="stat-value stat-value-sm">
+                            {{ recent[0].timestamp.strftime("%H:%M") }}
+                        </div>
+                        <div class="stat-label">
+                            Последний поиск
+                            &middot;
+                            {{ recent[0].timestamp.strftime("%d.%m.%Y") }}
+                        </div>
+                    {% else %}
+                        <div class="stat-value">—</div>
+                        <div class="stat-label">Нет данных</div>
+                    {% endif %}
+                </div>
+            </div>
+
+        </div>{# end summary row #}
+
+        {# ── Основной ряд: популярные + последние ──────────────── #}
+        <div class="row g-4">
+
+            {# ── Карточка 1: Популярные запросы ─────────────────── #}
+            {# popular = [{"_id": "alien", "count": 7}, ...]
+               max_count — значение у первого (самого популярного) элемента,
+               используется для расчёта ширины прогресс-бара. #}
+            <div class="col-12 col-md-6">
+                <div class="card h-100">
+                    <div class="card-header d-flex align-items-center gap-2">
+                        <i class="bi bi-fire text-warning"></i>
+                        <span>Топ-5 популярных запросов</span>
+                    </div>
+                    <div class="card-body p-0">
+                        {% if popular %}
+                            {% set max_count = popular[0].count %}
+                            {% for item in popular %}
+                            <div class="popular-item {% if loop.first %}popular-item-top{% endif %}">
+
+                                {# Строка: ранг + запрос + счётчик #}
+                                <div class="d-flex align-items-center gap-3 mb-2">
+                                    <span class="rank-number rank-{{ loop.index }}">
+                                        #{{ loop.index }}
+                                    </span>
+                                    <span class="popular-query">{{ item._id }}</span>
+                                    <span class="ms-auto popular-count">
+                                        &times; {{ item.count }}
+                                    </span>
+                                </div>
+
+                                {# Прогресс-бар: ширина пропорциональна count / max_count #}
+                                <div class="progress popular-progress">
+                                    <div class="progress-bar"
+                                         role="progressbar"
+                                         style="width: {{ (item.count / max_count * 100) | int }}%"
+                                         aria-valuenow="{{ item.count }}"
+                                         aria-valuemin="0"
+                                         aria-valuemax="{{ max_count }}">
+                                    </div>
+                                </div>
+
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-secondary text-center p-4 mt-2">
+                                <i class="bi bi-inbox me-2"></i>Статистика пока отсутствует
+                            </p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            {# ── Карточка 2: Последние запросы ──────────────────── #}
+            {# recent — список документов MongoDB.
+               Каждый содержит: search_value, search_type, timestamp,
+               results_count, genre (может быть пустой строкой). #}
+            <div class="col-12 col-md-6">
+                <div class="card h-100">
+                    <div class="card-header d-flex align-items-center gap-2">
+                        <i class="bi bi-clock-history text-info"></i>
+                        <span>Последние 5 запросов</span>
+                    </div>
+                    <div class="card-body p-0">
+                        {% if recent %}
+                            {% for item in recent %}
+                            <div class="recent-item">
+
+                                {# Бейдж типа поиска + название запроса в одну строку #}
+                                <div class="d-flex align-items-center gap-2 mb-1">
+                                    {% if item.search_type == "title" %}
+                                    <span class="badge recent-type-badge recent-badge-title">🔎 Search</span>
+                                    {% elif item.search_type == "genre" %}
+                                    <span class="badge recent-type-badge recent-badge-genre">🎭 Genre</span>
+                                    {% endif %}
+                                    <div class="recent-query">{{ item.search_value }}</div>
+                                </div>
+
+                                {# Метаданные: дата, результаты, жанр #}
+                                <div class="d-flex align-items-center gap-3 flex-wrap">
+                                    <small class="text-secondary">
+                                        <i class="bi bi-calendar3 me-1"></i>
+                                        {{ item.timestamp.strftime("%d.%m.%Y %H:%M") }}
+                                    </small>
+                                    {% if item.results_count %}
+                                    <small class="recent-results">
+                                        <i class="bi bi-film me-1"></i>
+                                        {{ item.results_count }} рез.
+                                    </small>
+                                    {% endif %}
+                                    {% if item.genre %}
+                                    <small class="recent-genre">
+                                        <i class="bi bi-tag me-1"></i>
+                                        {{ item.genre }}
+                                    </small>
+                                    {% endif %}
+                                </div>
+
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-secondary text-center p-4 mt-2">
+                                <i class="bi bi-inbox me-2"></i>Статистика пока отсутствует
+                            </p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+        </div>{# end main row #}
+
+        {# ── Подпись в конце страницы ───────────────────────────── #}
+        <div class="text-center mt-5 stats-footer">
+            <i class="bi bi-database me-1 text-secondary"></i>
+            <span class="text-secondary">MongoDB Analytics</span>
+            <span class="mx-2 text-secondary opacity-25">&middot;</span>
+            <span class="text-secondary">itch_films_logs &middot; search_logs</span>
+        </div>
+
+    </div>{# end container #}
+</section>
+
+{% endblock %}

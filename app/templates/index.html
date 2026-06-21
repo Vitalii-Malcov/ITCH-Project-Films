@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}ITCH Films — Поиск фильмов{% endblock %}
+
+
+{% block content %}
+
+{# ── Hero Section: Ken Burns фон + поиск ──────────────────────── #}
+<section class="hero-section">
+
+    {# Картинка анимируется через @keyframes kenburns в style.css.
+       Сам тег <img> не используем — background-image в CSS позволяет
+       анимировать весь блок без сдвига соседних элементов. #}
+    <div class="hero-bg"></div>
+
+    {# Затемняющий overlay: делает текст читабельным поверх фото #}
+    <div class="hero-overlay"></div>
+
+    {# Весь видимый контент — поверх overlay, z-index: 2 #}
+    <div class="hero-content">
+        <div class="container">
+
+            <h1 class="search-title">Найди свой фильм</h1>
+            <p class="search-subtitle">Поиск по базе данных Sakila</p>
+
+            <div class="row justify-content-center">
+                <div class="col-12 col-md-8 col-lg-6">
+                    <form action="/search" method="GET">
+                        <div class="input-group">
+                            <input
+                                type="text"
+                                name="q"
+                                class="form-control search-input"
+                                placeholder="Название фильма... например, ace или love"
+                                value="{{ query or '' }}"
+                                autofocus
+                            >
+                            <button type="submit" class="btn search-btn">
+                                <i class="bi bi-search me-1"></i>Найти
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            {# ── Жанровые кнопки-фильтры ──────────────────────────── #}
+            {# genres передаётся из routes.py через get_all_genres().
+               Каждая кнопка — ссылка /search?genre=Action.
+               Активный жанр получает класс "active". #}
+            {% if genres %}
+            <div class="genre-filter">
+                {% for g in genres %}
+                <a
+                    href="/search?genre={{ g.name }}"
+                    class="genre-pill {% if g.name == genre %}active{% endif %}"
+                >{{ g.name }}</a>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+        </div>
+    </div>
+
+</section>
+
+{# ── Featured Film — показывается только без активного поиска ─────── #}
+{# movies is none означает: пользователь ещё ничего не искал (начальная страница).
+   Как только пользователь сделает поиск — movies станет списком, карточка исчезнет. #}
+{% if movies is none %}
+<section class="featured-section">
+    <div class="container">
+        <div class="featured-card">
+
+            {# Постер — картинка из Unsplash, подобрана под "Canadian Rockies" #}
+            <div class="featured-poster">
+                <img
+                    src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=300&q=80"
+                    alt="ACADEMY DINOSAUR"
+                >
+                <span class="rating-badge">PG</span>
+            </div>
+
+            {# Информация о фильме — реальные данные из Sakila #}
+            <div class="flex-grow-1">
+                <div class="featured-label">
+                    <i class="bi bi-star-fill me-1"></i>Featured Film
+                </div>
+                <h2 class="featured-title">ACADEMY DINOSAUR</h2>
+                <div class="featured-meta">
+                    <span><i class="bi bi-calendar3 me-1"></i>2006</span>
+                    <span><i class="bi bi-collection-play me-1"></i>Documentary</span>
+                    <span><i class="bi bi-clock me-1"></i>86 мин</span>
+                </div>
+                <p class="featured-desc">
+                    A Epic Drama of a Feminist And a Mad Scientist who must Battle
+                    a Teacher in The Canadian Rockies.
+                </p>
+                <a href="/search?q=academy" class="featured-btn">
+                    <i class="bi bi-search me-1"></i>Найти похожие
+                </a>
+            </div>
+
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{# ── Секция результатов ────────────────────────────────────────── #}
+<section class="results-section pb-5">
+    <div class="container">
+
+        {% if movies is not none %}
+
+            {% if movies %}
+
+                {# Строка с описанием результатов.
+                   Показываем разный текст для поиска по названию и по жанру. #}
+                <p class="results-count">
+                    {% if genre %}
+                        Жанр: <strong>{{ genre }}</strong> —
+                    {% elif query %}
+                        По запросу <strong>"{{ query }}"</strong> —
+                    {% endif %}
+                    найдено фильмов: <strong>{{ movies | length }}</strong>
+                </p>
+
+                <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-4">
+
+                    {% for movie in movies %}
+                    <div class="col">
+                        <div class="film-card">
+
+                            {# ── Постер ── #}
+                            <div class="film-card-img">
+                                <img
+                                    src="{{ movie.image_url }}"
+                                    alt="{{ movie.title }}"
+                                    loading="lazy"
+                                    onerror="this.onerror=null; this.src='{{ default_image }}'"
+                                >
+                                {# Рейтинг — левый верхний угол #}
+                                {% if movie.rating %}
+                                <span class="rating-badge">{{ movie.rating }}</span>
+                                {% endif %}
+
+                                {# Жанр — правый нижний угол #}
+                                {% if movie.genre %}
+                                <span class="genre-badge">{{ movie.genre }}</span>
+                                {% endif %}
+                            </div>
+
+                            {# ── Информация ── #}
+                            <div class="film-card-body">
+
+                                <h5 class="film-title">{{ movie.title }}</h5>
+
+                                <div class="film-meta">
+                                    {% if movie.year %}
+                                    <span>
+                                        <i class="bi bi-calendar3"></i>
+                                        {{ movie.year }}
+                                    </span>
+                                    {% endif %}
+                                    {% if movie.length %}
+                                    <span>
+                                        <i class="bi bi-clock"></i>
+                                        {{ movie.length }} мин
+                                    </span>
+                                    {% endif %}
+                                </div>
+
+                            </div>
+
+                        </div>
+                    </div>
+                    {% endfor %}
+
+                </div>
+
+            {% else %}
+
+                <div class="no-results">
+                    <div class="no-results-icon">🎬</div>
+                    <h5>Ничего не найдено</h5>
+                    <p>
+                        {% if genre %}
+                            В жанре <strong>"{{ genre }}"</strong> фильмов не найдено.
+                        {% else %}
+                            По запросу <strong>"{{ query }}"</strong> фильмов не найдено.
+                        {% endif %}
+                    </p>
+                </div>
+
+            {% endif %}
+
+        {% endif %}
+
+    </div>
+</section>
+
+{% endblock %}

@@ -8,6 +8,17 @@
 {# Фоновое слайд-шоу подключено в base.html через .page-hero-background.
    Здесь только поисковая панель поверх общего фона. #}
 
+{# ── Пробел 4: сообщение об ошибке БД ─────────────────────────── #}
+{# db_error появляется только если MySQL недоступен при поиске.
+   В обычной работе db_error=None и этот блок не рендерится. #}
+{% if db_error %}
+<div class="container pt-3" style="position:relative; z-index:2;">
+    <div class="alert-db-error">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>{{ db_error }}
+    </div>
+</div>
+{% endif %}
+
 {# ── Hero Section: поисковая панель поверх фиксированного фона ── #}
 <section class="hero-section">
 
@@ -58,6 +69,64 @@
                                 class="genre-pill {% if g.name == genre %}active{% endif %}"
                             >{{ g.name }}</a>
                             {% endfor %}
+                        </div>
+                        {% endif %}
+
+                        {# ── Пробел 1: поиск по жанру + диапазон годов ────────── #}
+                        {# year_range передаётся из routes.py через get_year_range().
+                           В стандартной Sakila min=max=2006 (все фильмы 2006 года).
+                           Форма отображает реальный диапазон из базы как подсказку. #}
+                        {% if genres %}
+                        <div class="genre-year-form">
+                            <form action="/search" method="GET">
+                                <div class="gy-row">
+                                    <div class="gy-col-genre">
+                                        <label class="gy-label">Жанр</label>
+                                        <select name="genre" class="gy-select">
+                                            <option value="">— выберите —</option>
+                                            {% for g in genres %}
+                                            <option value="{{ g.name }}"
+                                                {% if g.name == genre %}selected{% endif %}>
+                                                {{ g.name }}
+                                            </option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="gy-col-year">
+                                        <label class="gy-label">
+                                            Год от
+                                            <span class="gy-hint">({{ year_range.min_year }})</span>
+                                        </label>
+                                        <input type="number" name="year_from"
+                                               class="gy-input"
+                                               value="{{ year_from }}"
+                                               placeholder="{{ year_range.min_year }}">
+                                    </div>
+                                    <div class="gy-col-year">
+                                        <label class="gy-label">
+                                            до
+                                            <span class="gy-hint">({{ year_range.max_year }})</span>
+                                        </label>
+                                        <input type="number" name="year_to"
+                                               class="gy-input"
+                                               value="{{ year_to }}"
+                                               placeholder="{{ year_range.max_year }}">
+                                    </div>
+                                    <div class="gy-col-btn">
+                                        <label class="gy-label">&nbsp;</label>
+                                        <button type="submit" class="btn search-btn gy-btn">
+                                            <i class="bi bi-funnel"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                {% if year_range.min_year == year_range.max_year %}
+                                <div class="gy-note">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    В базе Sakila все фильмы датированы
+                                    {{ year_range.min_year }} г. (учебная база данных)
+                                </div>
+                                {% endif %}
+                            </form>
                         </div>
                         {% endif %}
 
@@ -144,6 +213,28 @@
                     {% endfor %}
 
                 </div>
+
+                {# ── Пробел 2: пагинация «следующие / предыдущие 10» ─── #}
+                {# Показываем кнопки только когда есть что листать.
+                   offset > 0 → можно вернуться назад.
+                   movies|length == 10 → возможно есть следующая страница. #}
+                {% if offset > 0 or movies|length == 10 %}
+                <div class="pagination-nav">
+                    {% if offset > 0 %}
+                    {% set prev_offset = (offset - 10) if offset >= 10 else 0 %}
+                    <a href="{{ url_for('search', q=query, genre=genre, year_from=year_from, year_to=year_to, offset=prev_offset) }}"
+                       class="btn pagination-btn">
+                        <i class="bi bi-chevron-left me-1"></i>Предыдущие 10
+                    </a>
+                    {% endif %}
+                    {% if movies|length == 10 %}
+                    <a href="{{ url_for('search', q=query, genre=genre, year_from=year_from, year_to=year_to, offset=offset + 10) }}"
+                       class="btn pagination-btn ms-auto">
+                        Следующие 10<i class="bi bi-chevron-right ms-1"></i>
+                    </a>
+                    {% endif %}
+                </div>
+                {% endif %}
 
             {% else %}
 

@@ -284,6 +284,113 @@ body:has(.results-panel) .hero-content {
     transform: translateX(1px);
 }
 
+/* ── Ошибка подключения к БД ────────────── */
+.alert-db-error {
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+    border-radius: 0.6rem;
+    padding: 0.75rem 1.1rem;
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+/* ── Форма: жанр + диапазон годов ────────── */
+.genre-year-form {
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    padding: 0.7rem 0 0.5rem;
+    margin-top: 0.1rem;
+}
+
+/* Flex-строка с колонками жанр / год-от / год-до / кнопка */
+.gy-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+
+.gy-col-genre { flex: 2 1 140px; }
+.gy-col-year  { flex: 1 1 80px;  }
+.gy-col-btn   { flex: 0 0 auto;  }
+
+.gy-label {
+    display: block;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+    letter-spacing: 0.2px;
+}
+
+.gy-hint {
+    color: rgba(136, 136, 170, 0.6);
+    font-size: 0.68rem;
+}
+
+/* Select и number input в тёмном стиле проекта */
+.gy-select,
+.gy-input {
+    width: 100%;
+    background-color: #16162a;
+    border: 1.5px solid var(--border-card);
+    color: var(--text-main);
+    font-size: 0.85rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    transition: border-color 0.2s;
+    -webkit-appearance: none;
+}
+
+.gy-select:focus,
+.gy-input:focus {
+    border-color: var(--accent);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(226, 185, 75, 0.12);
+}
+
+/* Кнопка-иконка для формы жанр+год */
+.gy-btn {
+    padding: 0.5rem 0.9rem;
+    border-radius: 0.5rem !important;
+}
+
+/* Информационная подсказка про 2006 */
+.gy-note {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: 0.45rem;
+    opacity: 0.75;
+}
+
+/* ── Пагинация ───────────────────────────── */
+.pagination-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.pagination-btn {
+    background: rgba(226, 185, 75, 0.10);
+    border: 1px solid rgba(226, 185, 75, 0.30);
+    color: var(--accent);
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 0.45rem 1rem;
+    border-radius: 0.5rem;
+    text-decoration: none;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.pagination-btn:hover {
+    background: rgba(226, 185, 75, 0.18);
+    border-color: var(--accent);
+    color: var(--accent);
+    text-decoration: none;
+}
+
 /* ── Autocomplete dropdown ───────────────── */
 
 /* Обёртка: position:relative — якорь для position:absolute dropdown */

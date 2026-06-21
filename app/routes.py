@@ -3,7 +3,7 @@
 # Все маршруты (URL-адреса) приложения.
 # ─────────────────────────────────────────────
 
-from flask import render_template, request
+from flask import render_template, request, jsonify
 from app import app
 from app.mysql_connector import (
     search_movies_by_title,    # поиск по названию
@@ -105,6 +105,22 @@ def search():
                            genre=genre,
                            genres=genres,
                            default_image=DEFAULT_IMAGE)
+
+
+@app.route("/api/suggest")
+def suggest():
+    """Autocomplete: возвращает до 5 фильмов по части названия (JSON).
+    Используется кастомным dropdown на главной странице."""
+    q = request.args.get("q", "").strip()
+    if len(q) < 2:          # не запрашиваем при 0–1 символах
+        return jsonify([])
+    films = search_movies_by_title(q, limit=5) or []
+    return jsonify([
+        {"title": f["title"],
+         "genre": f.get("genre") or "",
+         "year":  f.get("year")  or ""}
+        for f in films
+    ])
 
 
 @app.route("/stats")

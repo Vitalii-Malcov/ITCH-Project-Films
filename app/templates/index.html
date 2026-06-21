@@ -5,16 +5,8 @@
 
 {% block content %}
 
-{# Фиксированный контейнер фонов: position:fixed, z-index:0.
-   Находится вне hero-section — покрывает ВСЕЮ страницу.
-   Результаты поиска тоже будут поверх этого же фона. #}
-<div class="hero-bg-container">
-    <div class="hero-bg hero-bg-1 is-active"></div>
-    <div class="hero-bg hero-bg-2"></div>
-    <div class="hero-bg hero-bg-3"></div>
-    <div class="hero-bg hero-bg-4"></div>
-    <div class="hero-overlay"></div>
-</div>
+{# Фоновое слайд-шоу подключено в base.html через .page-hero-background.
+   Здесь только поисковая панель поверх общего фона. #}
 
 {# ── Hero Section: поисковая панель поверх фиксированного фона ── #}
 <section class="hero-section">
@@ -34,18 +26,25 @@
                         <p class="search-subtitle">Поиск по базе данных Sakila</p>
 
                         <form action="/search" method="GET">
-                            <div class="input-group">
-                                <input
-                                    type="text"
-                                    name="q"
-                                    class="form-control search-input"
-                                    placeholder="Название фильма... например, ace или love"
-                                    value="{{ query or '' }}"
-                                    autofocus
-                                >
-                                <button type="submit" class="btn search-btn">
-                                    <i class="bi bi-search me-1"></i>Найти
-                                </button>
+                            {# autocomplete-wrapper: position:relative — якорь для dropdown #}
+                            <div class="autocomplete-wrapper">
+                                <div class="input-group">
+                                    <input
+                                        type="text"
+                                        name="q"
+                                        id="search-input"
+                                        class="form-control search-input"
+                                        placeholder="Название фильма... например, ace или love"
+                                        value="{{ query or '' }}"
+                                        autocomplete="off"
+                                        autofocus
+                                    >
+                                    <button type="submit" class="btn search-btn">
+                                        <i class="bi bi-search me-1"></i>Найти
+                                    </button>
+                                </div>
+                                {# Кастомный dropdown: заполняется JS через /api/suggest #}
+                                <div class="autocomplete-dropdown" id="autocomplete-dropdown"></div>
                             </div>
                         </form>
 
@@ -172,17 +171,80 @@
 
 {% block scripts %}
 <script>
-/* Слайд-шоу hero: каждые 13 сек убираем is-active с текущего слайда
-   и добавляем следующему. CSS transition:opacity 1.5s делает fade. */
+/*
+ * Кастомный autocomplete для поля поиска.
+ * Архитектура: input → debounce 300ms → fetch /api/suggest → render dropdown
+ * Клик по элементу → заполняет input → отправляет форму.
+ */
 (function () {
-    const slides = document.querySelectorAll('.hero-bg');
-    let current = 0;
+    const input    = document.getElementById('search-input');
+    const dropdown = document.getElementById('autocomplete-dropdown');
+    if (!input || !dropdown) return;
 
-    setInterval(function () {
-        slides[current].classList.remove('is-active');
-        current = (current + 1) % slides.length;
-        slides[current].classList.add('is-active');
-    }, 13000); /* 13 000 мс = 13 секунд */
+    let debounceTimer = null;
+
+    /* Экранируем HTML-спецсимволы чтобы не допустить XSS */
+    function esc(str) {
+        return String(str)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function closeDropdown() {
+        dropdown.innerHTML = '';
+        dropdown.classList.remove('show');
+    }
+
+    /* Строим одну карточку фильма в dropdown */
+    function makeItem(film) {
+        const el = document.createElement('div');
+        el.className = 'autocomplete-item';
+        const meta = [film.genre, film.year].filter(Boolean).join(' • ');
+        el.innerHTML =
+            '<div class="ac-title">' + esc(film.title) + '</div>' +
+            (meta ? '<div class="ac-meta">' + esc(meta) + '</div>' : '');
+
+        /* mousedown (не click) — срабатывает до blur, форма не теряет данные */
+        el.addEventListener('mousedown', function (e) {
+            e.preventDefault();
+            input.value = film.title;
+            closeDropdown();
+            input.closest('form').submit();
+        });
+        return el;
+    }
+
+    function fetchSuggestions(q) {
+        fetch('/api/suggest?q=' + encodeURIComponent(q))
+            .then(function (r) { return r.json(); })
+            .then(function (films) {
+                closeDropdown();
+                if (!films.length) return;
+                films.forEach(function (f) { dropdown.appendChild(makeItem(f)); });
+                dropdown.classList.add('show');
+            })
+            .catch(closeDropdown);
+    }
+
+    /* Debounce: запрашиваем только после 300ms тишины */
+    input.addEventListener('input', function () {
+        clearTimeout(debounceTimer);
+        const q = input.value.trim();
+        if (q.length < 2) { closeDropdown(); return; }
+        debounceTimer = setTimeout(function () { fetchSuggestions(q); }, 300);
+    });
+
+    /* Escape — закрыть dropdown */
+    input.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeDropdown();
+    });
+
+    /* Клик вне input и dropdown — закрыть */
+    document.addEventListener('click', function (e) {
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+            closeDropdown();
+        }
+    });
 }());
 </script>
 {% endblock %}

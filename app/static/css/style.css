@@ -40,10 +40,12 @@ a:hover {
 
 /* ── Шапка (header) ──────────────────────── */
 .site-header {
-    background-color: var(--bg-header);
-    border-bottom: 1px solid var(--border-card);
+    background: rgba(13, 13, 26, 0.88);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
     padding: 0.9rem 0;
-    position: sticky;      /* шапка остаётся видна при скролле */
+    position: sticky;
     top: 0;
     z-index: 100;
 }
@@ -93,15 +95,27 @@ a:hover {
     100% { transform: scale(1.09) translate(1%,   1%);   }
 }
 
-/* Фиксированный контейнер всех фоновых слайдов.
-   position:fixed — фон покрывает всю страницу, а не только hero.
-   overflow:hidden — клипирует Ken Burns (scale > 1 не создаёт горизонтальный скролл). */
-.hero-bg-container {
+/* Кинематографический фон: единый для всех страниц через base.html.
+   position:fixed — покрывает весь viewport поверх body.
+   overflow:hidden — клипирует Ken Burns (scale > 1 не выходит за экран). */
+.page-hero-background {
     position: fixed;
     inset: 0;
     z-index: 0;
     overflow: hidden;
-    pointer-events: none;   /* клики сквозь контейнер к контенту */
+    pointer-events: none;
+}
+
+/* main и footer выше фиксированного фона (z-index:0) */
+main {
+    position: relative;
+    z-index: 1;
+}
+
+/* Страничная секция: явный z-index для page-content на stats и др. */
+.page-content {
+    position: relative;
+    z-index: 1;
 }
 
 /* Hero section — поисковая панель поверх фиксированного фона */
@@ -182,6 +196,18 @@ a:hover {
     width: 100%;
 }
 
+/* ── Компактный hero когда результаты видны ──
+   :has() — CSS-селектор: «body, внутри которого есть .results-panel».
+   .results-panel появляется в DOM только когда есть результаты поиска.
+   Без результатов (начальная страница) hero остаётся полноэкранным. */
+body:has(.results-panel) .hero-section {
+    min-height: auto;
+}
+
+body:has(.results-panel) .hero-content {
+    padding: 2rem 0 1.5rem;
+}
+
 /* ── Секция результатов ─────────────────── */
 /* position:relative + z-index:1 — выше фиксированного hero-bg-container */
 .results-section {
@@ -256,6 +282,69 @@ a:hover {
     border-color: var(--accent-hover);
     color: #0b0c10;
     transform: translateX(1px);
+}
+
+/* ── Autocomplete dropdown ───────────────── */
+
+/* Обёртка: position:relative — якорь для position:absolute dropdown */
+.autocomplete-wrapper {
+    position: relative;
+}
+
+/* Сам dropdown: скрыт по умолчанию, показывается классом .show */
+.autocomplete-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 3px);  /* 3px зазор под input-group */
+    left: 0;
+    right: 0;
+    background: rgba(8, 8, 20, 0.96);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 0.65rem;
+    z-index: 1050;           /* выше всего контента, включая sticky-header (z:100) */
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.autocomplete-dropdown.show {
+    display: block;
+}
+
+/* Одна карточка фильма в dropdown */
+.autocomplete-item {
+    padding: 0.65rem 1rem;
+    cursor: pointer;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    transition: background-color 0.15s;
+}
+
+.autocomplete-item:last-child {
+    border-bottom: none;
+}
+
+.autocomplete-item:hover {
+    background: rgba(226, 185, 75, 0.08);
+}
+
+/* Название фильма */
+.ac-title {
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--text-main);
+    transition: color 0.15s;
+}
+
+.autocomplete-item:hover .ac-title {
+    color: var(--accent);
+}
+
+/* Жанр • Год */
+.ac-meta {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: 0.15rem;
 }
 
 /* ── Search Panel: центральный glass-контейнер ── */
@@ -439,6 +528,23 @@ a:hover {
     opacity: 0.4;
 }
 
+/* ── Стеклянные карточки статистики ─────── */
+.stats-card {
+    background: rgba(8, 8, 20, 0.72) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 0.75rem;
+}
+
+.stats-card .card-header {
+    background: rgba(255, 255, 255, 0.04) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+    color: var(--text-main);
+    font-weight: 600;
+    letter-spacing: 0.2px;
+}
+
 /* ── Страница статистики — бейдж MongoDB ── */
 .stats-db-badge {
     background-color: rgba(34, 197, 94, 0.12);
@@ -451,10 +557,12 @@ a:hover {
     letter-spacing: 0.3px;
 }
 
-/* ── Сводные карточки (3 штуки вверху) ─── */
+/* ── Сводные карточки статистики (glassmorphism) ─── */
 .stat-summary-card {
-    background-color: var(--bg-card);
-    border: 1px solid var(--border-card);
+    background: rgba(8, 8, 20, 0.72);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.09);
     border-radius: 0.75rem;
     padding: 1.6rem 1.4rem 1.4rem;
     text-align: center;
@@ -627,7 +735,12 @@ a:hover {
 
 /* ── Футер ───────────────────────────────── */
 .site-footer {
-    border-top: 1px solid var(--border-card);
+    position: relative;
+    z-index: 1;
+    background: rgba(8, 8, 20, 0.80);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
     padding: 1.5rem 0;
     text-align: center;
     color: var(--text-muted);

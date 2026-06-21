@@ -34,7 +34,7 @@ def _connect():
         client.server_info()
 
         db = client[local_settings.MONGO_DATABASE]
-        _collection = db["search_logs"]
+        _collection = db[local_settings.MONGO_COLLECTION]
         print("[MongoDB Stats] Подключение успешно.")
 
     except Exception as e:
@@ -144,6 +144,71 @@ def get_unique_queries():
     except Exception as e:
         print(f"[MongoDB Stats] Ошибка get_unique_queries: {e}")
         return 0
+
+
+def get_all_searches(limit=10, offset=0):
+    """
+    Возвращает все поисковые запросы постранично, новые первыми.
+
+    Аргументы:
+      limit  — записей на страницу (по умолчанию 10)
+      offset — сколько записей пропустить (для пагинации)
+
+    Возвращает список документов MongoDB.
+    При ошибке или недоступности — возвращает [].
+    """
+    if _collection is None:
+        return []
+    try:
+        results = list(
+            _collection
+            .find()
+            .sort("timestamp", DESCENDING)  # новые первыми
+            .skip(offset)
+            .limit(limit)
+        )
+        return results
+    except Exception as e:
+        print(f"[MongoDB Stats] Ошибка get_all_searches: {e}")
+        return []
+
+
+def get_unique_searches(limit=10, offset=0):
+    """
+    Возвращает уникальные запросы постранично через агрегацию.
+
+    Pipeline:
+      1. $match  — исключаем пустые search_value
+      2. $group  — группируем по search_value:
+                   count = количество поисков,
+                   last_seen = максимальный timestamp
+      3. $sort   — самые частые первыми (count убыв.)
+      4. $skip   — пропускаем offset записей
+      5. $limit  — берём limit записей
+
+    Возвращает список вида:
+      [{"_id": "alien", "count": 7, "last_seen": datetime}, ...]
+
+    При ошибке или недоступности — возвращает [].
+    """
+    if _collection is None:
+        return []
+    try:
+        pipeline = [
+            {"$match": {"search_value": {"$ne": ""}}},
+            {"$group": {
+                "_id":      "$search_value",
+                "count":    {"$sum": 1},
+                "last_seen": {"$max": "$timestamp"}
+            }},
+            {"$sort":  {"count": -1}},
+            {"$skip":  offset},
+            {"$limit": limit}
+        ]
+        return list(_collection.aggregate(pipeline))
+    except Exception as e:
+        print(f"[MongoDB Stats] Ошибка get_unique_searches: {e}")
+        return []
 
 
 # ── Запускаем подключение при импорте модуля ───

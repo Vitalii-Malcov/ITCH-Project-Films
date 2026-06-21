@@ -16,6 +16,7 @@ from app.mongo_logger import log_search
 from app.log_stats import (
     get_popular_searches, get_recent_searches,
     get_total_searches, get_unique_queries,
+    get_all_searches, get_unique_searches,
 )
 
 
@@ -151,6 +152,36 @@ def suggest():
          "year":  f.get("year")  or ""}
         for f in films
     ])
+
+
+@app.route("/stats/searches")
+def stats_searches():
+    """Страница: все поисковые запросы постранично (новые первыми)."""
+    try:
+        offset = max(0, int(request.args.get("offset", 0)))
+    except ValueError:
+        offset = 0
+    items = get_all_searches(limit=10, offset=offset)
+    total = get_total_searches()
+    return render_template("stats_list.html",
+                           items=items, total=total, offset=offset,
+                           list_type="searches",
+                           title="Все поиски")
+
+
+@app.route("/stats/unique")
+def stats_unique():
+    """Страница: уникальные запросы постранично (самые частые первыми)."""
+    try:
+        offset = max(0, int(request.args.get("offset", 0)))
+    except ValueError:
+        offset = 0
+    items = get_unique_searches(limit=10, offset=offset)
+    total = get_unique_queries()
+    return render_template("stats_list.html",
+                           items=items, total=total, offset=offset,
+                           list_type="unique",
+                           title="Уникальные запросы")
 
 
 @app.route("/stats")

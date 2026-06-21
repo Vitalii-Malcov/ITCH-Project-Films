@@ -31,26 +31,28 @@
         {# ── Три сводные карточки ───────────────────────────────── #}
         <div class="row g-3 mb-5">
 
-            {# Карточка: всего поисков #}
+            {# Карточка: всего поисков — кликабельна, ведёт на список #}
             <div class="col-12 col-sm-4">
-                <div class="stat-summary-card">
+                <a href="{{ url_for('stats_searches') }}"
+                   class="stat-summary-card stat-card-link">
                     <div class="stat-icon">
                         <i class="bi bi-search"></i>
                     </div>
                     <div class="stat-value">{{ total }}</div>
                     <div class="stat-label">Всего поисков</div>
-                </div>
+                </a>
             </div>
 
-            {# Карточка: уникальных запросов #}
+            {# Карточка: уникальных запросов — кликабельна, ведёт на список #}
             <div class="col-12 col-sm-4">
-                <div class="stat-summary-card">
+                <a href="{{ url_for('stats_unique') }}"
+                   class="stat-summary-card stat-card-link">
                     <div class="stat-icon">
                         <i class="bi bi-fingerprint"></i>
                     </div>
                     <div class="stat-value">{{ unique }}</div>
                     <div class="stat-label">Уникальных запросов</div>
-                </div>
+                </a>
             </div>
 
             {# Карточка: последний поиск — берём recent[0] если есть #}

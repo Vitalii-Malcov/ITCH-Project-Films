@@ -833,6 +833,90 @@ body:has(.results-panel) .hero-content {
     font-size: 0.78rem;
 }
 
+/* ── Кликабельные карточки статистики ────── */
+.stat-card-link {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.25s, box-shadow 0.25s;
+}
+
+.stat-card-link:hover {
+    border-color: rgba(226, 185, 75, 0.5);
+    box-shadow: var(--card-shadow-hover);
+    color: inherit;
+    text-decoration: none;
+}
+
+/* Подсказка «кликни» — появляется при наведении */
+.stat-card-link::after {
+    content: "↗";
+    position: absolute;
+    top: 0.6rem;
+    right: 0.7rem;
+    font-size: 0.75rem;
+    color: var(--accent);
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.stat-card-link:hover::after {
+    opacity: 0.7;
+}
+
+/* ── Страница детального списка ─────────── */
+.stats-back-link {
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.stats-back-link:hover {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+/* Таблица поисков */
+.stats-table {
+    border-collapse: collapse;
+    font-size: 0.88rem;
+}
+
+.stats-table th {
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.75rem;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    padding: 0 1rem 0.75rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.stats-table td {
+    padding: 0.65rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: var(--text-main);
+    vertical-align: middle;
+}
+
+.stats-table tr:last-child td {
+    border-bottom: none;
+}
+
+.stats-table tr:hover td {
+    background: rgba(226, 185, 75, 0.04);
+}
+
+/* Ячейка с текстом запроса — не переносить слишком длинные */
+.stats-query-cell {
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 500;
+}
+
 /* ── Подпись в конце страницы статистики ── */
 .stats-footer {
     border-top: 1px solid var(--border-card);

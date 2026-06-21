@@ -39,7 +39,7 @@ def _connect():
         client.server_info()
 
         db = client[local_settings.MONGO_DATABASE]
-        _collection = db["search_logs"]
+        _collection = db[local_settings.MONGO_COLLECTION]
         print("[MongoDB] Подключение успешно.")
 
     except Exception as e:

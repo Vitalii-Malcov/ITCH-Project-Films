@@ -72,173 +72,149 @@ a:hover {
     color: var(--text-main);
 }
 
-/* ── Hero Section с Ken Burns эффектом ──── */
+/* ── Hero Section: Ken Burns + слайд-шоу ─── */
 
-/* Медленный зум + лёгкое смещение.
-   alternate — картинка «дышит»: зум вперёд, потом назад. */
-@keyframes kenburns {
-    0%   { transform: scale(1.0) translate(0, 0); }
-    100% { transform: scale(1.12) translate(-2%, -1%); }
+/* 4 варианта анимации: каждый слайд «движется» в свою сторону.
+   alternate — картинка дышит: зум вперёд, потом назад. */
+@keyframes kenburns-1 {
+    0%   { transform: scale(1.0)  translate(0,    0);    }
+    100% { transform: scale(1.12) translate(-2%,  -1%);  }
+}
+@keyframes kenburns-2 {
+    0%   { transform: scale(1.0)  translate(0,    0);    }
+    100% { transform: scale(1.10) translate(2%,   -1%);  }
+}
+@keyframes kenburns-3 {
+    0%   { transform: scale(1.0)  translate(0,    0);    }
+    100% { transform: scale(1.12) translate(-1%,  -2%);  }
+}
+@keyframes kenburns-4 {
+    0%   { transform: scale(1.0)  translate(0,    0);    }
+    100% { transform: scale(1.09) translate(1%,   1%);   }
 }
 
-/* Внешняя оболочка: overflow:hidden прячет края анимируемой картинки */
+/* Фиксированный контейнер всех фоновых слайдов.
+   position:fixed — фон покрывает всю страницу, а не только hero.
+   overflow:hidden — клипирует Ken Burns (scale > 1 не создаёт горизонтальный скролл). */
+.hero-bg-container {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;   /* клики сквозь контейнер к контенту */
+}
+
+/* Hero section — поисковая панель поверх фиксированного фона */
 .hero-section {
     position: relative;
-    overflow: hidden;
-    min-height: 460px;
+    z-index: 1;
+    min-height: calc(100vh - 64px);
     display: flex;
     flex-direction: column;
     justify-content: center;
-    text-align: center;
 }
 
-/* Сама картинка — растянута на весь блок, анимируется независимо от текста */
+/* Базовый слайд: невидим, z-index:0, без анимации.
+   Transition: opacity 1.5s — плавный fade при смене. */
 .hero-bg {
     position: absolute;
     inset: 0;
-    background-image: url('/static/images/hero.jpg');
     background-size: cover;
-    background-position: center 30%;
-    animation: kenburns 22s ease-in-out infinite alternate;
-    will-change: transform;
+    background-position: center;
+    opacity: 0;
+    transition: opacity 1.5s ease-in-out;
+    will-change: opacity;
+    animation: none;
 }
 
-/* Затемняющий градиент: сверху — темнее (читабельность), снизу — плавный переход к bg */
+/* Активный слайд: виден + запускается его Ken Burns */
+.hero-bg.is-active {
+    opacity: 1;
+    will-change: transform, opacity;
+    animation-duration: 22s;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+    animation-direction: alternate;
+}
+
+/* Индивидуальные картинки и направление зума */
+.hero-bg-1 {
+    background-image: url('/static/images/hero.jpg');
+    background-position: center 30%;
+}
+.hero-bg-1.is-active { animation-name: kenburns-1; }
+
+.hero-bg-2 {
+    background-image: url('/static/images/hero2.jpg');
+}
+.hero-bg-2.is-active { animation-name: kenburns-2; }
+
+.hero-bg-3 {
+    background-image: url('/static/images/hero3.jpg');
+}
+.hero-bg-3.is-active { animation-name: kenburns-3; }
+
+.hero-bg-4 {
+    background-image: url('/static/images/hero4.jpg');
+}
+.hero-bg-4.is-active { animation-name: kenburns-4; }
+
+/* Overlay внутри hero-bg-container — покрывает всю страницу.
+   Снизу уходит к 0.93 чтобы под результатами фото почти не проступало,
+   но стекло results-panel ещё давало blur-эффект поверх него. */
 .hero-overlay {
     position: absolute;
     inset: 0;
     background: linear-gradient(
         to bottom,
-        rgba(11, 12, 16, 0.70) 0%,
-        rgba(11, 12, 16, 0.50) 40%,
-        rgba(11, 12, 16, 0.88) 100%
+        rgba(11, 12, 16, 0.72) 0%,
+        rgba(11, 12, 16, 0.42) 25%,
+        rgba(11, 12, 16, 0.82) 60%,
+        rgba(11, 12, 16, 0.93) 100%
     );
-    z-index: 1;
 }
 
 /* Весь контент поверх overlay */
 .hero-content {
     position: relative;
     z-index: 2;
-    padding: 3.5rem 0 2.5rem;
-}
-
-/* ── Featured Film ───────────────────────── */
-.featured-section {
-    padding: 2rem 0 0.5rem;
-}
-
-.featured-card {
-    background-color: var(--bg-card);
-    border: 1px solid var(--border-card);
-    border-radius: 0.75rem;
-    padding: 1.4rem 1.6rem;
-    display: flex;
-    gap: 1.4rem;
-    align-items: flex-start;
-    position: relative;
-    overflow: hidden;
-    max-width: 660px;
-    transition: border-color 0.25s, box-shadow 0.25s;
-}
-
-/* золотая черта сверху — как у summary-карточек на /stats */
-.featured-card::before {
-    content: "";
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 2px;
-    background: linear-gradient(90deg, var(--accent) 0%, transparent 70%);
-}
-
-.featured-card:hover {
-    border-color: rgba(226, 185, 75, 0.4);
-    box-shadow: var(--card-shadow-hover);
-}
-
-.featured-poster {
-    position: relative;
-    flex-shrink: 0;
-    width: 100px;
-    height: 142px;
-    border-radius: 0.5rem;
-    overflow: hidden;
-    border: 1px solid var(--border-card);
-}
-
-.featured-poster img {
+    padding: 4rem 0 3.5rem;
     width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
 }
 
-.featured-label {
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 1.2px;
-    text-transform: uppercase;
-    color: var(--accent);
-    margin-bottom: 0.45rem;
+/* ── Секция результатов ─────────────────── */
+/* position:relative + z-index:1 — выше фиксированного hero-bg-container */
+.results-section {
+    position: relative;
+    z-index: 1;
 }
 
-.featured-title {
-    font-size: 1.25rem;
-    font-weight: 800;
-    color: var(--text-main);
-    margin-bottom: 0.5rem;
-    letter-spacing: -0.3px;
-    line-height: 1.25;
-}
-
-.featured-meta {
-    display: flex;
-    gap: 1rem;
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    margin-bottom: 0.75rem;
-    flex-wrap: wrap;
-}
-
-.featured-desc {
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    line-height: 1.55;
-    margin-bottom: 1rem;
-    max-width: 460px;
-}
-
-.featured-btn {
-    display: inline-flex;
-    align-items: center;
-    background-color: var(--accent);
-    color: #0b0c10;
-    font-weight: 700;
-    font-size: 0.82rem;
-    padding: 0.42rem 1.1rem;
-    border-radius: 0.45rem;
-    border: none;
-    text-decoration: none;
-    transition: background-color 0.2s;
-}
-
-.featured-btn:hover {
-    background-color: var(--accent-hover);
-    color: #0b0c10;
-    text-decoration: none;
+/* Glass-панель результатов: тот же стиль что search-panel.
+   backdrop-filter размывает фото позади — фон seamlessly продолжается. */
+.results-panel {
+    background: rgba(8, 8, 20, 0.74);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 1rem;
+    padding: 1.5rem 1.5rem 1rem;
+    margin-bottom: 2rem;
 }
 
 .search-title {
-    font-size: 2rem;
-    font-weight: 700;
+    font-size: 2.6rem;
+    font-weight: 800;
     margin-bottom: 0.4rem;
     color: var(--text-main);
+    letter-spacing: -0.5px;
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
 }
 
 .search-subtitle {
-    color: var(--text-muted);
-    margin-bottom: 1.8rem;
-    font-size: 1rem;
+    color: #b0b0cc;
+    margin-bottom: 1.6rem;
+    font-size: 1.05rem;
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
 }
 
 /* Поле ввода */
@@ -282,39 +258,57 @@ a:hover {
     transform: translateX(1px);
 }
 
-/* ── Жанровые кнопки-фильтры ────────────── */
-.genre-filter {
-    display: flex;
-    flex-wrap: wrap;          /* переносим на новую строку если не помещаются */
-    gap: 0.5rem;
-    justify-content: center;
-    margin-top: 1.4rem;
+/* ── Search Panel: центральный glass-контейнер ── */
+
+/* Один блок объединяет h1, subtitle, форму и жанры.
+   Позиционируется по центру через row justify-content-center. */
+.search-panel {
+    background: rgba(8, 8, 20, 0.72);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 1rem;
+    padding: 2rem 2rem 0;
+    text-align: center;
 }
 
+/* ── Жанры внутри панели ─────────────────── */
+.genre-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    justify-content: center;
+    margin-top: 0;
+    padding: 0.55rem 0 0.1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* Текстовый таб — без рамки, без фона, цвет текста */
 .genre-pill {
     display: inline-block;
-    padding: 0.3rem 0.9rem;
-    border-radius: 2rem;      /* pill-форма — полностью скруглённые края */
-    border: 1px solid var(--border-card);
+    padding: 0.3rem 0.65rem;
+    border-radius: 0.25rem;
+    background: transparent;
+    border: none;
     color: var(--text-muted);
-    font-size: 0.8rem;
+    font-size: 0.82rem;
     font-weight: 500;
     text-decoration: none;
-    transition: border-color 0.2s, color 0.2s, background-color 0.2s;
     white-space: nowrap;
+    transition: color 0.18s;
 }
 
 .genre-pill:hover {
-    border-color: var(--accent);
-    color: var(--accent);
+    color: var(--text-main);
     text-decoration: none;
 }
 
+/* Активный жанр: золотой текст + тонкая линия снизу.
+   inset 0 -2px — имитация border-bottom без сдвига соседних элементов. */
 .genre-pill.active {
-    background-color: var(--accent);
-    border-color: var(--accent);
-    color: #0b0c10;           /* тёмный текст на золотом фоне */
-    font-weight: 700;
+    color: var(--accent);
+    font-weight: 600;
+    box-shadow: inset 0 -2px 0 var(--accent);
 }
 
 /* ── Жанровый бейдж на постере карточки ─── */
@@ -638,5 +632,5 @@ a:hover {
     text-align: center;
     color: var(--text-muted);
     font-size: 0.85rem;
-    margin-top: 4rem;
+    margin-top: 2rem;
 }

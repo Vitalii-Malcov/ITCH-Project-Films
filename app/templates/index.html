@@ -5,116 +5,85 @@
 
 {% block content %}
 
-{# ── Hero Section: Ken Burns фон + поиск ──────────────────────── #}
+{# Фиксированный контейнер фонов: position:fixed, z-index:0.
+   Находится вне hero-section — покрывает ВСЕЮ страницу.
+   Результаты поиска тоже будут поверх этого же фона. #}
+<div class="hero-bg-container">
+    <div class="hero-bg hero-bg-1 is-active"></div>
+    <div class="hero-bg hero-bg-2"></div>
+    <div class="hero-bg hero-bg-3"></div>
+    <div class="hero-bg hero-bg-4"></div>
+    <div class="hero-overlay"></div>
+</div>
+
+{# ── Hero Section: поисковая панель поверх фиксированного фона ── #}
 <section class="hero-section">
 
-    {# Картинка анимируется через @keyframes kenburns в style.css.
-       Сам тег <img> не используем — background-image в CSS позволяет
-       анимировать весь блок без сдвига соседних элементов. #}
-    <div class="hero-bg"></div>
-
-    {# Затемняющий overlay: делает текст читабельным поверх фото #}
-    <div class="hero-overlay"></div>
-
-    {# Весь видимый контент — поверх overlay, z-index: 2 #}
+    {# Контент, z-index: 2 — выше и фона, и overlay #}
     <div class="hero-content">
         <div class="container">
 
-            <h1 class="search-title">Найди свой фильм</h1>
-            <p class="search-subtitle">Поиск по базе данных Sakila</p>
-
+            {# Один центральный столбец — никакого двухколоночного деления. #}
             <div class="row justify-content-center">
-                <div class="col-12 col-md-8 col-lg-6">
-                    <form action="/search" method="GET">
-                        <div class="input-group">
-                            <input
-                                type="text"
-                                name="q"
-                                class="form-control search-input"
-                                placeholder="Название фильма... например, ace или love"
-                                value="{{ query or '' }}"
-                                autofocus
-                            >
-                            <button type="submit" class="btn search-btn">
-                                <i class="bi bi-search me-1"></i>Найти
-                            </button>
+                <div class="col-12 col-md-10 col-lg-8 col-xl-7">
+
+                    {# search-panel: единый glass-блок (h1 + subtitle + форма + жанры) #}
+                    <div class="search-panel">
+
+                        <h1 class="search-title">Найди свой фильм</h1>
+                        <p class="search-subtitle">Поиск по базе данных Sakila</p>
+
+                        <form action="/search" method="GET">
+                            <div class="input-group">
+                                <input
+                                    type="text"
+                                    name="q"
+                                    class="form-control search-input"
+                                    placeholder="Название фильма... например, ace или love"
+                                    value="{{ query or '' }}"
+                                    autofocus
+                                >
+                                <button type="submit" class="btn search-btn">
+                                    <i class="bi bi-search me-1"></i>Найти
+                                </button>
+                            </div>
+                        </form>
+
+                        {# Жанры: текстовые табы, отделены тонкой линией от формы.
+                           genres передаётся из routes.py через get_all_genres(). #}
+                        {% if genres %}
+                        <div class="genre-filter">
+                            {% for g in genres %}
+                            <a
+                                href="/search?genre={{ g.name }}"
+                                class="genre-pill {% if g.name == genre %}active{% endif %}"
+                            >{{ g.name }}</a>
+                            {% endfor %}
                         </div>
-                    </form>
+                        {% endif %}
+
+                    </div>
+
                 </div>
             </div>
-
-            {# ── Жанровые кнопки-фильтры ──────────────────────────── #}
-            {# genres передаётся из routes.py через get_all_genres().
-               Каждая кнопка — ссылка /search?genre=Action.
-               Активный жанр получает класс "active". #}
-            {% if genres %}
-            <div class="genre-filter">
-                {% for g in genres %}
-                <a
-                    href="/search?genre={{ g.name }}"
-                    class="genre-pill {% if g.name == genre %}active{% endif %}"
-                >{{ g.name }}</a>
-                {% endfor %}
-            </div>
-            {% endif %}
 
         </div>
     </div>
 
 </section>
-
-{# ── Featured Film — показывается только без активного поиска ─────── #}
-{# movies is none означает: пользователь ещё ничего не искал (начальная страница).
-   Как только пользователь сделает поиск — movies станет списком, карточка исчезнет. #}
-{% if movies is none %}
-<section class="featured-section">
-    <div class="container">
-        <div class="featured-card">
-
-            {# Постер — картинка из Unsplash, подобрана под "Canadian Rockies" #}
-            <div class="featured-poster">
-                <img
-                    src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=300&q=80"
-                    alt="ACADEMY DINOSAUR"
-                >
-                <span class="rating-badge">PG</span>
-            </div>
-
-            {# Информация о фильме — реальные данные из Sakila #}
-            <div class="flex-grow-1">
-                <div class="featured-label">
-                    <i class="bi bi-star-fill me-1"></i>Featured Film
-                </div>
-                <h2 class="featured-title">ACADEMY DINOSAUR</h2>
-                <div class="featured-meta">
-                    <span><i class="bi bi-calendar3 me-1"></i>2006</span>
-                    <span><i class="bi bi-collection-play me-1"></i>Documentary</span>
-                    <span><i class="bi bi-clock me-1"></i>86 мин</span>
-                </div>
-                <p class="featured-desc">
-                    A Epic Drama of a Feminist And a Mad Scientist who must Battle
-                    a Teacher in The Canadian Rockies.
-                </p>
-                <a href="/search?q=academy" class="featured-btn">
-                    <i class="bi bi-search me-1"></i>Найти похожие
-                </a>
-            </div>
-
-        </div>
-    </div>
-</section>
-{% endif %}
 
 {# ── Секция результатов ────────────────────────────────────────── #}
+{# position:relative z-index:1 в CSS — выше фиксированного hero-bg-container.
+   results-panel — glass-блок поверх того же фона, что и hero. #}
 <section class="results-section pb-5">
     <div class="container">
 
         {% if movies is not none %}
+        <div class="results-panel">
 
             {% if movies %}
 
-                {# Строка с описанием результатов.
-                   Показываем разный текст для поиска по названию и по жанру. #}
+                {# Заголовок результатов внутри glass-панели #}
                 <p class="results-count">
                     {% if genre %}
                         Жанр: <strong>{{ genre }}</strong> —
@@ -193,9 +162,27 @@
 
             {% endif %}
 
+        </div>
         {% endif %}
 
     </div>
 </section>
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* Слайд-шоу hero: каждые 13 сек убираем is-active с текущего слайда
+   и добавляем следующему. CSS transition:opacity 1.5s делает fade. */
+(function () {
+    const slides = document.querySelectorAll('.hero-bg');
+    let current = 0;
+
+    setInterval(function () {
+        slides[current].classList.remove('is-active');
+        current = (current + 1) % slides.length;
+        slides[current].classList.add('is-active');
+    }, 13000); /* 13 000 мс = 13 секунд */
+}());
+</script>
 {% endblock %}

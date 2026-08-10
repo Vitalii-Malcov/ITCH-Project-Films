@@ -1,5 +1,16 @@
 # AI Poster Generation — Progress Checkpoint
 
+> **⚠️ АРХИВНЫЙ ДОКУМЕНТ.** Это снимок состояния на 2026-07-10, ДО массовой генерации
+> постеров. Все цифры ниже (queue state, "Completed: 5", "Failed: film_id=10") устарели
+> и оставлены только как исторический контекст хода разработки.
+>
+> **Актуальный статус проекта (2026-08-10):** 1001 фильм · 996 постеров через OpenAI ·
+> 5 через MockProvider fallback (moderation_blocked) · очередь done=996/failed=5/pending=0 ·
+> 1001/1001 фильмов имеют отображаемый постер · 162 pytest теста passed.
+> Подробности: [`docs/SESSION_SUMMARY_2026-07-11.md`](SESSION_SUMMARY_2026-07-11.md) и
+> раздел «AI-постеры — архитектура и текущее состояние» в
+> [`PROJECT_ARCHITECTURE.md`](../PROJECT_ARCHITECTURE.md).
+
 **Date:** 2026-07-10
 **Branch:** `ai-poster-service`
 **Last commit before this checkpoint:** `3e41a08 Add OpenAI poster provider and batch generation controls`
@@ -28,7 +39,7 @@ Model is read from `OPENAI_IMAGE_MODEL` env var (fallback: `gpt-image-2`).
 | File | Purpose |
 |---|---|
 | `providers/openai_provider.py` | OpenAIProvider — calls Images API, returns raw WebP bytes |
-| `providers/mock_provider.py` | MockProvider — returns blank PNG, no API, for local dev |
+| `providers/mock.py` | MockProvider — returns a solid-color WebP placeholder, no API, for local dev |
 | `prompt_builder.py` | Builds prompt from film title + genre + description |
 | `poster_service.py` | Orchestrates prompt → generate → storage → DB save |
 | `poster_repository.py` | CRUD for `movie_posters` table; `get_openai_completed_film_ids()` |
@@ -80,7 +91,7 @@ Test classes:
 
 ---
 
-## Current Queue State (2026-07-10)
+## Current Queue State (2026-07-10) — ⚠️ HISTORICAL, до массовой генерации
 
 | Status     | Count |
 |------------|-------|
@@ -89,15 +100,18 @@ Test classes:
 | `failed`   | 1     |
 | `processing` | 0  |
 
+> Финальное состояние очереди (2026-08-10): `done=996`, `failed=5`, `pending=0`,
+> `processing=0`. См. banner в начале документа.
+
 ### First 10 Pending film_ids (priority DESC, film_id ASC)
 
 `4, 5, 6, 7, 8, 9, 13, 14, 15, 16`
 
 ---
 
-## Completed OpenAI Posters
+## Completed OpenAI Posters — ⚠️ HISTORICAL, до массовой генерации
 
-**Count: 5**
+**Count: 5** (на момент чекпоинта 2026-07-10; финально — 996, см. banner выше)
 
 | film_id | Notes |
 |---------|-------|
@@ -109,7 +123,7 @@ Test classes:
 
 ---
 
-## Failed Items
+## Failed Items — ⚠️ HISTORICAL, film_id=10 больше не failed
 
 | film_id | Title            | tries | Reason              |
 |---------|-----------------|-------|---------------------|
@@ -119,26 +133,27 @@ Test classes:
 HTTP 400, `code: moderation_blocked`, `stage: output`, `category: other`.
 This is an OpenAI content policy decision — not a code bug.
 
-**Action:** The item stays `failed`. It will NOT be auto-retried on future `--limit` runs.
-To retry manually (only when intentionally decided):
-
-```
-.venv/Scripts/python.exe scripts/generate_movie_posters.py --retry-failed --film-id 10
-```
-
-**Do NOT run this command automatically tomorrow.**
+> **Обновление:** film_id=10 (ALADDIN CALENDAR) был успешно сгенерирован через OpenAI
+> в ходе последующей массовой генерации — сейчас имеет реальный постер (провайдер
+> `openai`, статус `completed`), проверено в галерее. Финальный список из 5 постоянно
+> заблокированных фильмов другой: film_id 54, 153, 516, 680, 792
+> (BANGER PINOCCHIO, CITIZEN SHREK, LEGEND JEDI, PINOCCHIO SIMON, SHREK LICENSE) —
+> вероятно из-за trademark-названий (SHREK/PINOCCHIO/JEDI). Для них используется
+> `MockProvider` как постоянный fallback.
 
 ---
 
-## Continuation Command (Tomorrow)
+## Continuation Command — ⚠️ HISTORICAL, уже выполнено
 
-Generate the next batch of 5 posters (starting from film_id 4):
+Этот раздел описывал план на "завтра" от 2026-07-10. Массовая генерация была
+выполнена в последующих сессиях (см. `SESSION_SUMMARY_2026-07-11.md`), команды ниже
+сохранены только для истории и не должны запускаться повторно без явного решения:
 
 ```
 .venv/Scripts/python.exe scripts/generate_movie_posters.py --limit 5
 ```
 
-**Safety rules before running:**
+**Safety rules before running (актуально при любой будущей генерации):**
 1. Run `--dry-run` first to see candidates.
 2. Verify `.env` has `OPENAI_API_KEY` set.
 3. Do NOT run `--retry-failed` without explicit decision.
@@ -157,7 +172,10 @@ Generate the next batch of 5 posters (starting from film_id 4):
 
 ---
 
-## Files Changed in This Session (uncommitted at checkpoint)
+## Files Changed in This Session (uncommitted at checkpoint) — ⚠️ HISTORICAL
+
+Все файлы из этого списка были закоммичены в последующих коммитах на ветке
+`ai-poster-service` (см. `git log`). Список сохранён только как исторический контекст.
 
 | File | Changes |
 |---|---|

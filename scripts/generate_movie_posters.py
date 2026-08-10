@@ -40,6 +40,7 @@ New flags (budget-safe mass generation):
                                   official price for gpt-image-2 quality=low 1024x1536).
 """
 
+
 import os
 import sys
 import time
@@ -95,7 +96,6 @@ BUDGET_HARD_LIMIT     = 7.50    # USD — never spend more than this in one run
 # ── Argument parsing ──────────────────────────────────────────────────
 
 def _positive_int(value: str) -> int:
-    """argparse type validator — rejects zero and negative integers."""
     try:
         n = int(value)
     except ValueError:
@@ -202,10 +202,7 @@ def parse_args() -> argparse.Namespace:
 # ── Database helpers ──────────────────────────────────────────────────
 
 def _fetch_films() -> list[dict]:
-    """
-    Fetch all films from Sakila: film_id, title, description, genre.
-    Uses MIN(c.name) to pick one genre per film (same as mysql_connector.py).
-    """
+
     conn   = mysql.connector.connect(**local_settings.dbconfig)
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""

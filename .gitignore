@@ -25,6 +25,7 @@ scripts/debug/
 
 # Claude Code runtime files
 .claude/scheduled_tasks.lock
+.claude/settings.local.json
 
 # Logs
 *.log

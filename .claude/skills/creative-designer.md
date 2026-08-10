@@ -1,0 +1,5 @@
+- Generate creative ideas.
+- Suggest unique project features.
+- Think like a startup founder.
+- Focus on user engagement.
+- Propose modern trends.

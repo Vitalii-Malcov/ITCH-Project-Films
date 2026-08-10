@@ -1,35 +1,34 @@
-# ─────────────────────────────────────────────
-# tests/conftest.py
-# Настройка Playwright для тестов ITCH Films.
-#
-# ВАЖНО: перед запуском тестов Flask должен быть
-# запущен вручную в отдельном терминале:
-#   python run.py
-#
-# Запуск тестов (в видимом браузере):
-#   pytest tests/ --headed --slowmo=600 -v
-#
-# Запуск в фоне (без браузера):
-#   pytest tests/ -v
-# ─────────────────────────────────────────────
+"""
+Shared fixtures for all tests.
 
+Rules:
+- No real .env is used — tests must not rely on actual API keys or credentials.
+- No real network calls.
+- No real database connections.
+"""
 import pytest
 
-
-# Базовый URL сайта — Flask по умолчанию на 5000.
-BASE_URL = "http://127.0.0.1:5000"
-
-
-@pytest.fixture(scope="session")
-def base_url():
-    """Передаётся в каждый тест через параметр page.goto(base_url)."""
-    return BASE_URL
+# Module-level import: registers the ROOT 'app' package in sys.modules
+# before any test can trigger services.ai_posters.poster_repository, which
+# does sys.path.insert(0, itch_films/) and could otherwise cause Python to
+# resolve 'app' as itch_films/app/ (a different Flask application).
+from app import create_app  # noqa: E402
 
 
-@pytest.fixture(scope="session")
-def browser_context_args(browser_context_args):
-    """Устанавливаем размер окна браузера как у типичного ноутбука."""
-    return {
-        **browser_context_args,
-        "viewport": {"width": 1280, "height": 800},
-    }
+@pytest.fixture()
+def app():
+    """Create a Flask test application.
+
+    Real .env is loaded by create_app() via load_dotenv(), but all external
+    service calls (Firecrawl, MongoDB) are mocked in individual tests before
+    any request is made, so the key is never actually used.
+    """
+    flask_app = create_app()
+    flask_app.config["TESTING"] = True
+    yield flask_app
+
+
+@pytest.fixture()
+def client(app):
+    """Flask test client derived from the test app."""
+    return app.test_client()

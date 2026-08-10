@@ -159,12 +159,12 @@ def search_movies_by_title(keyword, limit=10, offset=0):
     # MIN(c.name) выбирает один жанр (алфавитно первый) из всех жанров фильма.
     query = """
         SELECT f.film_id, f.title, f.release_year, f.rating, f.length,
-               MIN(c.name) AS genre
+               MIN(c.name) AS genre, f.description
         FROM   film f
         LEFT JOIN film_category fc ON f.film_id      = fc.film_id
         LEFT JOIN category      c  ON fc.category_id = c.category_id
         WHERE  f.title LIKE %s
-        GROUP BY f.film_id, f.title, f.release_year, f.rating, f.length
+        GROUP BY f.film_id, f.title, f.release_year, f.rating, f.length, f.description
         ORDER  BY f.title
         LIMIT  %s OFFSET %s
     """
@@ -177,12 +177,13 @@ def search_movies_by_title(keyword, limit=10, offset=0):
 
     movies = [
         {
-            "film_id": row[0],
-            "title":   row[1],
-            "year":    int(row[2]) if row[2] else None,
-            "rating":  row[3],
-            "length":  row[4],
-            "genre":   row[5],   # новое поле — название жанра или None
+            "film_id":     row[0],
+            "title":       row[1],
+            "year":        int(row[2]) if row[2] else None,
+            "rating":      row[3],
+            "length":      row[4],
+            "genre":       row[5],
+            "description": row[6],
         }
         for row in rows
     ]
@@ -230,7 +231,7 @@ def search_movies_by_genre(genre_name, year_from=None, year_to=None,
 
     query = f"""
         SELECT f.film_id, f.title, f.release_year, f.rating, f.length,
-               c.name AS genre
+               c.name AS genre, f.description
         FROM   film f
         JOIN   film_category fc ON f.film_id      = fc.film_id
         JOIN   category      c  ON fc.category_id = c.category_id
@@ -247,16 +248,101 @@ def search_movies_by_genre(genre_name, year_from=None, year_to=None,
 
     movies = [
         {
-            "film_id": row[0],
-            "title":   row[1],
-            "year":    int(row[2]) if row[2] else None,
-            "rating":  row[3],
-            "length":  row[4],
-            "genre":   row[5],
+            "film_id":     row[0],
+            "title":       row[1],
+            "year":        int(row[2]) if row[2] else None,
+            "rating":      row[3],
+            "length":      row[4],
+            "genre":       row[5],
+            "description": row[6],
         }
         for row in rows
     ]
     return movies
+
+
+def get_film_by_id(film_id: int) -> dict | None:
+    """
+    Возвращает один фильм по film_id (для API регенерации постера).
+    Те же поля что search_movies_by_title().
+    """
+    conn   = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT f.film_id, f.title, f.release_year, f.rating, f.length,
+               MIN(c.name) AS genre, f.description
+        FROM   film f
+        LEFT JOIN film_category fc ON f.film_id      = fc.film_id
+        LEFT JOIN category      c  ON fc.category_id = c.category_id
+        WHERE  f.film_id = %s
+        GROUP BY f.film_id, f.title, f.release_year, f.rating, f.length, f.description
+    """, (film_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    if not row:
+        return None
+    return {
+        "film_id":     row[0],
+        "title":       row[1],
+        "year":        int(row[2]) if row[2] else None,
+        "rating":      row[3],
+        "length":      row[4],
+        "genre":       row[5],
+        "description": row[6],
+    }
+
+
+def get_all_films(limit=24, offset=0):
+    """
+    Возвращает все фильмы из Sakila с пагинацией.
+    Используется страницей галереи постеров.
+
+    Возвращает список словарей с теми же полями что search_movies_by_title().
+    """
+    conn   = get_connection()
+    cursor = conn.cursor()
+
+    query = """
+        SELECT f.film_id, f.title, f.release_year, f.rating, f.length,
+               MIN(c.name) AS genre, f.description
+        FROM   film f
+        LEFT JOIN film_category fc ON f.film_id      = fc.film_id
+        LEFT JOIN category      c  ON fc.category_id = c.category_id
+        GROUP BY f.film_id, f.title, f.release_year, f.rating, f.length, f.description
+        ORDER BY f.film_id
+        LIMIT  %s OFFSET %s
+    """
+
+    cursor.execute(query, (limit, offset))
+    rows = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    return [
+        {
+            "film_id":     row[0],
+            "title":       row[1],
+            "year":        int(row[2]) if row[2] else None,
+            "rating":      row[3],
+            "length":      row[4],
+            "genre":       row[5],
+            "description": row[6],
+        }
+        for row in rows
+    ]
+
+
+def get_total_films():
+    """Возвращает общее количество фильмов в Sakila. Нужно для пагинации галереи."""
+    conn   = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM film")
+    count = cursor.fetchone()[0]
+    cursor.close()
+    conn.close()
+    return count
 
 
 # Этот блок запускается только если выполнить файл напрямую:

@@ -1,22 +1,14 @@
-# ─────────────────────────────────────────────
-# app/__init__.py
-# Этот файл превращает папку app/ в модуль
-# Python и создаёт Flask-приложение.
-# Он запускается первым при старте сервера.
-# ─────────────────────────────────────────────
+from flask import Flask
+from dotenv import load_dotenv
 
-from flask import Flask   # импортируем класс Flask из библиотеки flask
-import local_settings     # импортируем наши настройки
 
-# Создаём Flask-приложение.
-# __name__ говорит Flask: "ищи шаблоны и статику
-# относительно этого файла".
-app = Flask(__name__)
+def create_app():
+    load_dotenv()
 
-# Передаём секретный ключ из local_settings в Flask.
-app.secret_key = local_settings.SECRET_KEY
+    app = Flask(__name__)
 
-# Импортируем маршруты ПОСЛЕ создания app.
-# Порядок важен: routes.py использует переменную app,
-# которая должна уже существовать к этому моменту.
-from app import routes  # noqa: E402, F401
+    # Register blueprints (import here to avoid circular imports)
+    from app.routes import firecrawl_bp
+    app.register_blueprint(firecrawl_bp)
+
+    return app

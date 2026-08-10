@@ -1,0 +1,4 @@
+- Design REST APIs.
+- Use JSON responses.
+- Follow backend best practices.
+- Explain endpoints.

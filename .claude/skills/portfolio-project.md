@@ -1,0 +1,5 @@
+- Build projects suitable for GitHub portfolio.
+- Use professional structure.
+- Follow junior developer best practices.
+- Create README examples.
+- Suggest interview talking points.

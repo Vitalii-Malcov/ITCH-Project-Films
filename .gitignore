@@ -1,8 +1,45 @@
-../.venv/
+# Python
 __pycache__/
-.idea/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
 
-local_settings.py
+# Environment & secrets
+.env
+itch_films/local_settings.py
 
-*.pyc
+# Flask runtime logs
+itch_films/flask_out.txt
+
+# AI-generated poster files (binary, 2100+ files — tracked separately)
+storage/posters/
+
+# Generated knowledge graph artifacts
+graphify-out/
+Архивы/
+
+# Diagnostic / one-off scripts (not project code)
+scripts/debug/
+
+# Claude Code runtime files
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
+
+# Logs
 *.log
+
+# IDE & tools
+.vscode/
+.idea/
+.playwright-mcp/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db

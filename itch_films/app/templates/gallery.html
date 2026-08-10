@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}ITCH Films — Галерея постеров{% endblock %}
+
+
+{% block content %}
+<div class="page-content">
+    <div class="container py-4">
+
+        {# ── Заголовок ──────────────────────────────────────────────── #}
+        <div class="gallery-header">
+            <h1 class="gallery-title">
+                <i class="bi bi-images me-2"></i>Галерея постеров
+            </h1>
+            <p class="gallery-subtitle">
+                AI-постеры для всех фильмов базы Sakila
+                <span class="gallery-count">{{ total }} фильмов</span>
+            </p>
+        </div>
+
+        {# ── Сетка постеров ─────────────────────────────────────────── #}
+        {% if films %}
+        <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-6 g-3">
+
+            {% for film in films %}
+            <div class="col">
+                <div class="gallery-card">
+
+                    {# Постер #}
+                    <div class="gallery-card-img">
+                        <img
+                            src="{{ film.image_url }}"
+                            alt="{{ film.title }}"
+                            loading="lazy"
+                            onerror="this.onerror=null; this.src='{{ default_image }}'"
+                        >
+
+                        {# Hover-оверлей с описанием #}
+                        {% if film.description %}
+                        <div class="poster-overlay">
+                            <p class="poster-desc">{{ film.description }}</p>
+                        </div>
+                        {% endif %}
+
+                        {# Рейтинг #}
+                        {% if film.rating %}
+                        <span class="rating-badge">{{ film.rating }}</span>
+                        {% endif %}
+
+                        {# Кнопка регенерации — правый верхний угол #}
+                        <button class="regen-btn"
+                                data-film-id="{{ film.film_id }}"
+                                onclick="regeneratePoster(this)"
+                                title="Перегенерировать постер">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+
+                        {# Жанр #}
+                        {% if film.genre %}
+                        <span class="genre-badge">{{ film.genre }}</span>
+                        {% endif %}
+                    </div>
+
+                    {# Подпись #}
+                    <div class="gallery-card-body">
+                        <p class="gallery-film-title">{{ film.title }}</p>
+                    </div>
+
+                </div>
+            </div>
+            {% endfor %}
+
+        </div>
+
+        {# ── Пагинация ──────────────────────────────────────────────── #}
+        {% set prev_offset = offset - page_size %}
+        {% set next_offset = offset + page_size %}
+        {% set has_prev    = offset > 0 %}
+        {% set has_next    = next_offset < total %}
+
+        {% if has_prev or has_next %}
+        <div class="pagination-nav mt-4">
+
+            {% if has_prev %}
+            <a href="{{ url_for('gallery', offset=prev_offset) }}"
+               class="btn pagination-btn">
+                <i class="bi bi-chevron-left me-1"></i>Предыдущие {{ page_size }}
+            </a>
+            {% endif %}
+
+            <span class="pagination-info">
+                {{ offset + 1 }}–{{ [offset + page_size, total] | min }}
+                из {{ total }}
+            </span>
+
+            {% if has_next %}
+            <a href="{{ url_for('gallery', offset=next_offset) }}"
+               class="btn pagination-btn ms-auto">
+                Следующие {{ page_size }}<i class="bi bi-chevron-right ms-1"></i>
+            </a>
+            {% endif %}
+
+        </div>
+        {% endif %}
+
+        {% else %}
+        <div class="no-results">
+            <div class="no-results-icon">🎬</div>
+            <h5>Постеры ещё не сгенерированы</h5>
+            <p>Запусти <code>scripts/generate_movie_posters.py</code></p>
+        </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function regeneratePoster(btn) {
+    const filmId = btn.getAttribute('data-film-id');
+    const card   = btn.closest('.film-card, .gallery-card');
+    const img    = card ? card.querySelector('img') : null;
+    if (!filmId || !img) return;
+
+    btn.disabled = true;
+    btn.classList.add('loading');
+
+    fetch('/api/poster/regenerate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ film_id: parseInt(filmId, 10) }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.image_url) {
+            img.src = data.image_url + '?t=' + Date.now();
+        }
+    })
+    .catch(function() {})
+    .finally(function() {
+        btn.disabled = false;
+        btn.classList.remove('loading');
+    });
+}
+</script>
+{% endblock %}

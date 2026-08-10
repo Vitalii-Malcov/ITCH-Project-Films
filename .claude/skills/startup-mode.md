@@ -1,0 +1,5 @@
+- Suggest innovative ideas.
+- Look for market problems.
+- Think about monetization.
+- Compare with competitors.
+- Focus on real-world usefulness.

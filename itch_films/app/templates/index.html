@@ -175,10 +175,27 @@
                                     loading="lazy"
                                     onerror="this.onerror=null; this.src='{{ default_image }}'"
                                 >
+
+                                {# Hover-оверлей: описание фильма появляется при наведении.
+                                   z-index:2 — поверх постера, но под бейджами (z-index:3). #}
+                                {% if movie.description %}
+                                <div class="poster-overlay">
+                                    <p class="poster-desc">{{ movie.description }}</p>
+                                </div>
+                                {% endif %}
+
                                 {# Рейтинг — левый верхний угол #}
                                 {% if movie.rating %}
                                 <span class="rating-badge">{{ movie.rating }}</span>
                                 {% endif %}
+
+                                {# Кнопка регенерации — правый верхний угол #}
+                                <button class="regen-btn"
+                                        data-film-id="{{ movie.film_id }}"
+                                        onclick="regeneratePoster(this)"
+                                        title="Перегенерировать постер">
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                </button>
 
                                 {# Жанр — правый нижний угол #}
                                 {% if movie.genre %}
@@ -205,6 +222,13 @@
                                     </span>
                                     {% endif %}
                                 </div>
+
+                                <button
+                                    class="btn btn-news mt-2 w-100"
+                                    data-title="{{ movie.title }}"
+                                    onclick="loadFilmNews(this)">
+                                    📖 Подробнее
+                                </button>
 
                             </div>
 
@@ -257,6 +281,22 @@
 
     </div>
 </section>
+
+{# ── Модал: подробнее о фильме ─────────────────────────────────── #}
+{# Один модал на всю страницу. JS заполняет его перед показом. #}
+<div class="modal fade" id="newsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content news-modal-content">
+            <div class="modal-header news-modal-header">
+                <h5 class="modal-title" id="newsModalTitle"></h5>
+                <button type="button" class="btn-close btn-close-white"
+                        data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="newsModalBody">
+            </div>
+        </div>
+    </div>
+</div>
 
 {% endblock %}
 
@@ -337,5 +377,113 @@
         }
     });
 }());
+</script>
+
+<script>
+/*
+ * Загружает информацию о фильме через /api/film/news и показывает в модале.
+ * data-title на кнопке → fetch → Bootstrap modal.
+ */
+function loadFilmNews(btn) {
+    const title      = btn.getAttribute('data-title');
+    const modalEl    = document.getElementById('newsModal');
+    const modalTitle = document.getElementById('newsModalTitle');
+    const modalBody  = document.getElementById('newsModalBody');
+
+    modalTitle.textContent = title + ' — Подробнее';
+    modalBody.innerHTML    = '<div class="text-center py-4">' +
+        '<div class="spinner-border text-light" role="status"></div>' +
+        '<p class="mt-2 text-secondary">Загружаем информацию о фильме...</p></div>';
+
+    var existing = bootstrap.Modal.getInstance(modalEl);
+    if (existing) existing.dispose();
+    var modal = new bootstrap.Modal(modalEl);
+    modal.show();
+
+    // Именованная функция — нужна чтобы removeEventListener мог её найти.
+    // Анонимную функцию удалить нельзя: каждый new Function() — новая ссылка.
+    function handleOutsideClick(event) {
+        if (!event.target.closest('.modal-dialog')) {
+            modal.hide();
+        }
+    }
+
+    // Удаляем предыдущий обработчик перед добавлением нового —
+    // иначе при повторных открытиях они накапливаются.
+    if (modalEl._outsideClickHandler) {
+        modalEl.removeEventListener('click', modalEl._outsideClickHandler);
+    }
+    modalEl._outsideClickHandler = handleOutsideClick;
+    modalEl.addEventListener('click', handleOutsideClick);
+
+    // Убираем обработчик когда модал полностью закрылся.
+    // { once: true } здесь уместен: событие hidden.bs.modal — одноразовое на закрытие.
+    modalEl.addEventListener('hidden.bs.modal', function() {
+        modalEl.removeEventListener('click', handleOutsideClick);
+        modalEl._outsideClickHandler = null;
+    }, { once: true });
+
+    fetch('/api/film/news?title=' + encodeURIComponent(title))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.results || data.results.length === 0) {
+                modalBody.innerHTML = '<p class="text-secondary">Дополнительная информация не найдена.</p>';
+                return;
+            }
+            var html = '<div class="news-list">';
+            data.results.forEach(function(item) {
+                html += '<a href="' + esc(item.url) + '" target="_blank" ' +
+                        'rel="noopener" class="news-item">' +
+                        '<div class="news-item-title">' + esc(item.title || '') + '</div>' +
+                        '<div class="news-item-desc">'  + esc(item.description || '') + '</div>' +
+                        '<div class="news-item-url">'   + esc(item.url || '') + '</div>' +
+                        '</a>';
+            });
+            html += '</div>';
+            modalBody.innerHTML = html;
+        })
+        .catch(function() {
+            modalBody.innerHTML = '<p class="text-danger">Не удалось загрузить информацию.</p>';
+        });
+}
+
+/*
+ * Регенерирует постер для одного фильма через POST /api/poster/regenerate.
+ * После успеха обновляет <img src> без перезагрузки страницы.
+ * ?t=timestamp в URL сбрасывает кеш браузера для этого изображения.
+ */
+function regeneratePoster(btn) {
+    const filmId = btn.getAttribute('data-film-id');
+    const card   = btn.closest('.film-card, .gallery-card');
+    const img    = card ? card.querySelector('img') : null;
+    if (!filmId || !img) return;
+
+    btn.disabled = true;
+    btn.classList.add('loading');
+
+    fetch('/api/poster/regenerate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ film_id: parseInt(filmId, 10) }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.image_url) {
+            img.src = data.image_url + '?t=' + Date.now();
+        }
+    })
+    .catch(function() { /* сеть недоступна — ничего не делаем */ })
+    .finally(function() {
+        btn.disabled = false;
+        btn.classList.remove('loading');
+    });
+}
+
+/* Экранирует HTML-спецсимволы (защита от XSS в данных от API) */
+function esc(str) {
+    return String(str)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 </script>
 {% endblock %}

@@ -1,0 +1,5 @@
+- Think from user perspective.
+- Suggest MVP first.
+- Prioritize important features.
+- Avoid feature overload.
+- Explain business value.

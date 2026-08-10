@@ -1,0 +1,5 @@
+- Use subtle animations.
+- Modern cards.
+- Smooth transitions.
+- Professional look.
+- Mobile friendly.

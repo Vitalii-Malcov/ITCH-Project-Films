@@ -1,16 +1,9 @@
-# ─────────────────────────────────────────────
-# run.py
-# Точка входа в приложение.
-# Запускай именно этот файл командой:
-#   python run.py
-# ─────────────────────────────────────────────
+import os
 
-from app import app   # импортируем объект app из папки app/
+from app import create_app
 
+app = create_app()
 
 if __name__ == "__main__":
-    # debug=True — режим разработки:
-    # Flask сам перезапускается при изменении кода
-    # и показывает подробные ошибки в браузере.
-    # Никогда не используй debug=True на живом сервере.
-    app.run(debug=True)
+    debug = os.getenv("FLASK_DEBUG", "false").lower() == "true"
+    app.run(debug=debug)

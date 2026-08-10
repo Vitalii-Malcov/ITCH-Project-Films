@@ -1,0 +1,4 @@
+- Design simple database schemas.
+- Explain relationships.
+- Avoid unnecessary complexity.
+- Prefer SQLite for learning projects.

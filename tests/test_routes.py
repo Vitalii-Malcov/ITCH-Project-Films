@@ -1,17 +1,17 @@
 """
-Flask API route tests.
+Тесты маршрутов Flask API.
 
-All external services (Firecrawl, MongoDB) are replaced with mocks.
-No real network connections. No real database writes or reads.
+Все внешние сервисы (Firecrawl, MongoDB) заменены моками.
+Никаких реальных сетевых подключений. Никакой реальной записи/чтения из БД.
 
-Routes tested:
+Тестируемые маршруты:
   POST /api/scrape
   POST /api/search
-  POST /api/extract   (stub, returns 501)
+  POST /api/extract   (заглушка, возвращает 501)
   GET  /api/history/<collection>
 
-Note: This project has no /, /search, or /stats HTML routes.
-Those belong to the itch_films sub-project (itch_films/).
+Примечание: в этом проекте нет HTML-маршрутов /, /search или /stats.
+Они принадлежат субпроекту itch_films (itch_films/).
 """
 import pytest
 from unittest.mock import MagicMock
@@ -27,17 +27,17 @@ from services.firecrawl.exceptions import (
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Shared fixtures
+# Общие фикстуры
 # ──────────────────────────────────────────────────────────────────────────────
 
 @pytest.fixture(autouse=True)
 def _mock_mongo(monkeypatch):
-    """Replace the module-level MongoService instance in the route with a mock.
+    """Заменяет экземпляр MongoService уровня модуля в маршруте на мок.
 
-    Patched here (not in conftest) because mongo is created at import time.
-    We monkeypatch the *attribute* on the already-imported module object.
+    Патчится здесь (не в conftest), потому что mongo создаётся во время импорта.
+    Мы monkeypatch'им *атрибут* на уже импортированном объекте модуля.
     """
-    import app.routes.firecrawl as route_module
+    import firecrawl_app.routes.firecrawl as route_module
     mock = MagicMock()
     mock.save_scrape.return_value = "test_doc_id"
     mock.save_crawl.return_value = "test_doc_id"
@@ -47,9 +47,9 @@ def _mock_mongo(monkeypatch):
 
 
 def _mock_fc_client(scrape_result=None, scrape_raises=None):
-    """Build a lightweight mock FirecrawlClient.
+    """Строит лёгкий мок FirecrawlClient.
 
-    Does NOT instantiate the real FirecrawlClient or touch V1FirecrawlApp.
+    НЕ создаёт экземпляр настоящего FirecrawlClient и не трогает V1FirecrawlApp.
     """
     mock = MagicMock()
     if scrape_raises is not None:
@@ -70,13 +70,13 @@ class TestScrapeEndpoint:
         assert resp.status_code == 400
 
     def test_no_json_body_returns_4xx(self, client):
-        # Flask 3.x returns 415 (Unsupported Media Type) when Content-Type
-        # is missing entirely; both 400 and 415 indicate invalid input.
+        # Flask 3.x возвращает 415 (Unsupported Media Type), когда Content-Type
+        # полностью отсутствует; и 400, и 415 означают некорректный ввод.
         resp = client.post("/api/scrape")
         assert resp.status_code in (400, 415)
 
     def test_successful_scrape_returns_200_with_fields(self, client, monkeypatch):
-        import app.routes.firecrawl as route_module
+        import firecrawl_app.routes.firecrawl as route_module
         result = FirecrawlResult(
             url="https://example.com",
             title="Example Domain",
@@ -94,7 +94,7 @@ class TestScrapeEndpoint:
         assert "_id" in body
 
     def test_no_firecrawl_key_returns_503(self, client, monkeypatch):
-        import app.routes.firecrawl as route_module
+        import firecrawl_app.routes.firecrawl as route_module
 
         def _raise():
             raise FirecrawlConfigurationError("no key")
@@ -106,7 +106,7 @@ class TestScrapeEndpoint:
         assert "error" in body
 
     def test_rate_limit_returns_429(self, client, monkeypatch):
-        import app.routes.firecrawl as route_module
+        import firecrawl_app.routes.firecrawl as route_module
         monkeypatch.setattr(
             route_module, "get_firecrawl_client",
             lambda: _mock_fc_client(scrape_raises=FirecrawlRateLimitError("rate limit")),
@@ -115,7 +115,7 @@ class TestScrapeEndpoint:
         assert resp.status_code == 429
 
     def test_connection_error_returns_503(self, client, monkeypatch):
-        import app.routes.firecrawl as route_module
+        import firecrawl_app.routes.firecrawl as route_module
         monkeypatch.setattr(
             route_module, "get_firecrawl_client",
             lambda: _mock_fc_client(scrape_raises=FirecrawlConnectionError("conn failed")),
@@ -124,7 +124,7 @@ class TestScrapeEndpoint:
         assert resp.status_code == 503
 
     def test_validation_error_returns_400(self, client, monkeypatch):
-        import app.routes.firecrawl as route_module
+        import firecrawl_app.routes.firecrawl as route_module
         monkeypatch.setattr(
             route_module, "get_firecrawl_client",
             lambda: _mock_fc_client(scrape_raises=FirecrawlValidationError("bad url")),
@@ -133,7 +133,7 @@ class TestScrapeEndpoint:
         assert resp.status_code == 400
 
     def test_generic_firecrawl_error_returns_500(self, client, monkeypatch):
-        import app.routes.firecrawl as route_module
+        import firecrawl_app.routes.firecrawl as route_module
         monkeypatch.setattr(
             route_module, "get_firecrawl_client",
             lambda: _mock_fc_client(scrape_raises=FirecrawlError("unknown")),
@@ -153,13 +153,13 @@ class TestSearchEndpoint:
         assert resp.status_code == 400
 
     def test_no_json_body_returns_4xx(self, client):
-        # Flask 3.x returns 415 (Unsupported Media Type) when Content-Type
-        # is missing entirely; both 400 and 415 indicate invalid input.
+        # Flask 3.x возвращает 415 (Unsupported Media Type), когда Content-Type
+        # полностью отсутствует; и 400, и 415 означают некорректный ввод.
         resp = client.post("/api/search")
         assert resp.status_code in (400, 415)
 
     def test_no_firecrawl_key_returns_503(self, client, monkeypatch):
-        import app.routes.firecrawl as route_module
+        import firecrawl_app.routes.firecrawl as route_module
 
         def _raise():
             raise FirecrawlConfigurationError("no key")
@@ -170,7 +170,7 @@ class TestSearchEndpoint:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# POST /api/extract  (not yet implemented)
+# POST /api/extract  (пока не реализован)
 # ──────────────────────────────────────────────────────────────────────────────
 
 class TestExtractEndpoint:

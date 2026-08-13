@@ -4,7 +4,6 @@
 # ─────────────────────────────────────────────
 
 import os
-import sys
 
 from flask import render_template, request, jsonify, send_from_directory
 from app import app
@@ -24,33 +23,28 @@ from app.log_stats import (
     get_all_searches, get_unique_searches,
 )
 
-# Paths relative to this file (itch_films/app/routes.py)
+# Пути относительно этого файла (itch_films/app/routes.py)
 # dirname x1 → itch_films/app/
 # dirname x2 → itch_films/
-# dirname x3 → Project_IT_Career_Hub_2/  (project root)
+# dirname x3 → Project_IT_Career_Hub_2/  (корень проекта)
 _this_dir    = os.path.dirname(os.path.abspath(__file__))
 _project_root = os.path.normpath(os.path.join(_this_dir, '..', '..'))
 POSTERS_DIR  = os.path.join(_project_root, 'storage', 'posters')
 
-# Make services/ importable (services/ lives in project root, not itch_films/)
-if _project_root not in sys.path:
-    sys.path.insert(0, _project_root)
-# TODO: sys.path manipulation does not belong in routes.py.
-#   Find a single initialisation point (e.g. run.py or app/__init__.py)
-#   that sets up the project root on sys.path before any routes are loaded,
-#   so routes.py can import services without touching sys.path itself.
+# sys.path на корень проекта настраивается один раз в app/__init__.py
+# (там же, где подключается Firecrawl-blueprint) — до импорта этого файла.
 
-# Fallback image shown when no poster is found in movie_posters table.
+# Запасное изображение, если постер не найден в таблице movie_posters.
 DEFAULT_POSTER = '/static/images/placeholder_movie.png'
 
 
 def _enrich_with_posters(movies: list) -> None:
     """
-    Add image_url to each movie dict using the movie_posters write DB.
+    Добавляет image_url в каждый словарь фильма из write-БД movie_posters.
 
-    Uses PosterRepository.get_latest_by_film_ids() — one DB query for the
-    entire result page instead of N individual calls.
-    Falls back to DEFAULT_POSTER if the table is unreachable.
+    Использует PosterRepository.get_latest_by_film_ids() — один запрос к БД
+    на всю страницу результатов вместо N отдельных вызовов.
+    При недоступности таблицы возвращает DEFAULT_POSTER.
     """
     try:
         from services.ai_posters import PosterRepository
@@ -67,7 +61,7 @@ def _enrich_with_posters(movies: list) -> None:
 
 @app.route("/posters/<filename>")
 def serve_poster(filename):
-    """Serve AI-generated poster files from storage/posters/."""
+    """Отдаёт AI-сгенерированные файлы постеров из storage/posters/."""
     return send_from_directory(POSTERS_DIR, filename)
 
 
@@ -217,12 +211,12 @@ def gallery():
 def api_poster_regenerate():
     """
     POST /api/poster/regenerate
-    Body: {"film_id": 42}
-    Response: {"image_url": "/posters/001102.webp"}
-              или {"error": "..."}
+    Тело запроса: {"film_id": 42}
+    Ответ: {"image_url": "/posters/001102.webp"}
+           или {"error": "..."}
 
     Генерирует новый постер для одного фильма вне очереди.
-    Всегда создаёт новую запись в movie_posters (intentional re-generation).
+    Всегда создаёт новую запись в movie_posters (намеренная регенерация).
     """
     data    = request.get_json(silent=True) or {}
     film_id = data.get("film_id")

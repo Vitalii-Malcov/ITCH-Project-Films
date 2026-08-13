@@ -14,7 +14,7 @@ from services.mongo import MongoService
 
 firecrawl_bp = Blueprint("firecrawl", __name__, url_prefix="/api")
 
-# MongoService does not require external credentials at import time
+# MongoService не требует внешних credentials на момент импорта
 mongo = MongoService()
 
 ALLOWED_COLLECTIONS = {"scrapes", "searches", "crawls"}
@@ -26,7 +26,7 @@ def get_firecrawl_client() -> FirecrawlClient:
 
 @firecrawl_bp.route("/scrape", methods=["POST"])
 def scrape():
-    """POST /api/scrape  — body: {"url": "..."}"""
+    """POST /api/scrape  — тело запроса: {"url": "..."}"""
     data = request.get_json()
     if not data or "url" not in data:
         return jsonify({"error": "Missing required field: url"}), 400
@@ -51,7 +51,7 @@ def scrape():
 
 @firecrawl_bp.route("/crawl", methods=["POST"])
 def crawl():
-    """POST /api/crawl  — body: {"url": "...", "limit": 10}"""
+    """POST /api/crawl  — тело запроса: {"url": "...", "limit": 10}"""
     data = request.get_json()
     if not data or "url" not in data:
         return jsonify({"error": "Missing required field: url"}), 400
@@ -78,7 +78,7 @@ def crawl():
 
 @firecrawl_bp.route("/search", methods=["POST"])
 def search():
-    """POST /api/search  — body: {"query": "...", "limit": 5}"""
+    """POST /api/search  — тело запроса: {"query": "...", "limit": 5}"""
     data = request.get_json()
     if not data or "query" not in data:
         return jsonify({"error": "Missing required field: query"}), 400
@@ -113,7 +113,7 @@ def extract():
 
 @firecrawl_bp.route("/history/<collection>", methods=["GET"])
 def history(collection):
-    """GET /api/history/<collection>?limit=10 — recent results from MongoDB."""
+    """GET /api/history/<collection>?limit=10 — последние результаты из MongoDB."""
     if collection not in ALLOWED_COLLECTIONS:
         return jsonify({"error": f"Unknown collection '{collection}'. Use: scrapes, searches, crawls"}), 400
 

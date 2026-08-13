@@ -7,8 +7,8 @@ def create_app():
 
     app = Flask(__name__)
 
-    # Register blueprints (import here to avoid circular imports)
-    from app.routes import firecrawl_bp
+    # Регистрируем blueprint'ы (импорт внутри функции — избегаем циклических импортов)
+    from firecrawl_app.routes import firecrawl_bp
     app.register_blueprint(firecrawl_bp)
 
     return app

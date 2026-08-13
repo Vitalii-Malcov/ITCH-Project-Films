@@ -1,1 +1,1 @@
-from app.routes.firecrawl import firecrawl_bp
+from firecrawl_app.routes.firecrawl import firecrawl_bp

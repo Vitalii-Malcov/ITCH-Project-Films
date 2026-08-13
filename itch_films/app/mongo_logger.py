@@ -11,9 +11,22 @@
 # в терминал и продолжаем работу без логирования.
 # ─────────────────────────────────────────────
 
+import sys
+
 from pymongo import MongoClient
 from datetime import datetime
 import local_settings
+
+# Некоторые консоли Windows используют однобайтовую кодировку (например cp1252),
+# в которую не помещаются русские буквы из print() ниже. Без этой настройки
+# такой print() крашится с UnicodeEncodeError и роняет запуск всего сервера.
+# errors="replace" вместо падения просто заменяет нечитаемые символы на "?".
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(errors="replace")
+        except Exception:
+            pass
 
 # Модульная переменная: коллекция MongoDB.
 # None означает "нет соединения" — все функции

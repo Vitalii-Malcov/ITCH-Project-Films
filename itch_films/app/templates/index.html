@@ -100,7 +100,8 @@
                                         <input type="number" name="year_from"
                                                class="gy-input"
                                                value="{{ year_from }}"
-                                               placeholder="{{ year_range.min_year }}">
+                                               placeholder="{{ year_range.min_year }}"
+                                               min="1990" max="2026">
                                     </div>
                                     <div class="gy-col-year">
                                         <label class="gy-label">
@@ -110,7 +111,8 @@
                                         <input type="number" name="year_to"
                                                class="gy-input"
                                                value="{{ year_to }}"
-                                               placeholder="{{ year_range.max_year }}">
+                                               placeholder="{{ year_range.max_year }}"
+                                               min="1990" max="2026">
                                     </div>
                                     <div class="gy-col-btn">
                                         <label class="gy-label">&nbsp;</label>
@@ -119,6 +121,13 @@
                                         </button>
                                     </div>
                                 </div>
+                                {# year_error — сервер проверяет "Год от"/"Год до" на
+                                   диапазон 1990–2026 в routes.py (_parse_year). #}
+                                {% if year_error %}
+                                <div class="alert-db-error mt-2 mb-0">
+                                    <i class="bi bi-exclamation-triangle-fill me-2"></i>{{ year_error }}
+                                </div>
+                                {% endif %}
                                 {% if year_range.min_year == year_range.max_year %}
                                 <div class="gy-note">
                                     <i class="bi bi-info-circle me-1"></i>

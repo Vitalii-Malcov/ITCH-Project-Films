@@ -159,7 +159,7 @@ class TestSearchByGenre:
 
         # Вводим диапазон годов
         page.fill("input[name='year_from']", "1990")
-        page.fill("input[name='year_to']", "2030")
+        page.fill("input[name='year_to']", "2026")
 
         # Нажимаем кнопку-фильтр
         page.click("button.gy-btn")
@@ -167,6 +167,29 @@ class TestSearchByGenre:
 
         expect(page.locator(".results-count")).to_contain_text("Comedy")
         assert page.locator(".film-card").count() > 0
+
+    def test_year_out_of_range_shows_error(self, page: Page):
+        """Год вне диапазона 1990–2026 (в т.ч. отрицательный) блокирует поиск с сообщением.
+
+        Переходим по прямой ссылке (не через клик по кнопке формы), потому что
+        браузерная HTML5-валидация (min="1990" на поле) сама не даст отправить
+        форму со значением -5 — здесь же проверяется именно серверная защита.
+        """
+        page.goto(f"{BASE_URL}/search?genre=Comedy&year_from=-5&year_to=2026")
+
+        error = page.locator(".alert-db-error")
+        expect(error).to_be_visible()
+        expect(error).to_contain_text("1990")
+        # Карточек фильмов быть не должно — поиск не выполнялся.
+        assert page.locator(".film-card").count() == 0
+
+    def test_year_from_greater_than_year_to_shows_error(self, page: Page):
+        """«Год от» больше «Год до» — тоже некорректный диапазон."""
+        page.goto(f"{BASE_URL}/search?genre=Comedy&year_from=2020&year_to=1995")
+
+        error = page.locator(".alert-db-error")
+        expect(error).to_be_visible()
+        assert page.locator(".film-card").count() == 0
 
 
 # ── 5. Пагинация ──────────────────────────────────────────────────

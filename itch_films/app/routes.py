@@ -37,6 +37,30 @@ POSTERS_DIR  = os.path.join(_project_root, 'storage', 'posters')
 # Запасное изображение, если постер не найден в таблице movie_posters.
 DEFAULT_POSTER = '/static/images/placeholder_movie.png'
 
+# Допустимый диапазон годов для формы поиска "жанр + годы".
+YEAR_MIN = 1990
+YEAR_MAX = 2026
+
+
+def _parse_year(value: str):
+    """
+    Проверяет строку года из формы поиска.
+
+    Пустая строка — год не указан, фильтр по нему не применяется (это не ошибка).
+    Иначе строка должна быть целым числом в диапазоне [YEAR_MIN, YEAR_MAX].
+
+    Возвращает (год: int | None, текст_ошибки: str | None).
+    """
+    if not value:
+        return None, None
+    try:
+        year = int(value)
+    except ValueError:
+        return None, f"Год должен быть числом от {YEAR_MIN} до {YEAR_MAX}."
+    if year < YEAR_MIN or year > YEAR_MAX:
+        return None, f"Год должен быть в диапазоне от {YEAR_MIN} до {YEAR_MAX}."
+    return year, None
+
 
 def _enrich_with_posters(movies: list) -> None:
     """
@@ -99,24 +123,37 @@ def search():
     movies   = None
     db_error = None
 
-    try:
-        if query:
-            movies = search_movies_by_title(query, offset=offset)
+    # ── Проверяем годы ДО похода в базу: "от" и "до" должны быть числами
+    # в диапазоне YEAR_MIN..YEAR_MAX, иначе поиск не выполняется вообще.
+    yf, year_error = _parse_year(year_from)
+    if not year_error:
+        yt, year_error = _parse_year(year_to)
+    else:
+        yt = None
+    if not year_error and yf is not None and yt is not None and yf > yt:
+        year_error = '«Год от» не может быть больше «Год до».'
 
-        if not movies and genre:
-            yf = int(year_from) if year_from else None
-            yt = int(year_to)   if year_to   else None
-            movies = search_movies_by_genre(genre,
-                                            year_from=yf, year_to=yt,
-                                            offset=offset)
-    except Exception:
-        db_error = ("База данных временно недоступна. "
-                    "Попробуйте позже.")
+    if year_error:
         movies = []
+    else:
+        try:
+            if query:
+                movies = search_movies_by_title(query, offset=offset)
 
-    # ── Логируем поиск в MongoDB ──────────────────────────────────
+            if not movies and genre:
+                movies = search_movies_by_genre(genre,
+                                                year_from=yf, year_to=yt,
+                                                offset=offset)
+        except Exception:
+            db_error = ("База данных временно недоступна. "
+                        "Попробуйте позже.")
+            movies = []
+
+    # ── Логируем поиск в MongoDB (некорректные годы не логируем) ──
     results_count = len(movies) if movies else 0
-    if query:
+    if year_error:
+        pass
+    elif query:
         log_search(search_type="title", search_value=query,
                    results_count=results_count)
     elif genre:
@@ -144,7 +181,7 @@ def search():
                            offset=offset, genres=genres,
                            year_range=year_range,
                            default_image=DEFAULT_POSTER,
-                           db_error=db_error)
+                           db_error=db_error, year_error=year_error)
 
 
 @app.route("/api/suggest")

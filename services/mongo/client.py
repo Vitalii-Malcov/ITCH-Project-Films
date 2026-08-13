@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class MongoService:
-    """Service for storing and retrieving Firecrawl results in MongoDB."""
+    """Сервис для сохранения и чтения результатов Firecrawl в MongoDB."""
 
     def __init__(self):
         uri = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
@@ -21,11 +21,11 @@ class MongoService:
         logger.info(f"MongoService connected to '{db_name}'")
 
     # ------------------------------------------------------------------
-    # Save methods
+    # Методы сохранения
     # ------------------------------------------------------------------
 
     def save_scrape(self, result: FirecrawlResult) -> str:
-        """Save a FirecrawlResult to the 'scrapes' collection."""
+        """Сохраняет FirecrawlResult в коллекцию 'scrapes'."""
         doc = asdict(result)
         doc["saved_at"] = datetime.now(timezone.utc)
         inserted = self._db.scrapes.insert_one(doc)
@@ -33,7 +33,7 @@ class MongoService:
         return str(inserted.inserted_id)
 
     def save_search(self, result: SearchResult) -> str:
-        """Save a SearchResult to the 'searches' collection."""
+        """Сохраняет SearchResult в коллекцию 'searches'."""
         doc = result.to_dict()
         doc["saved_at"] = datetime.now(timezone.utc)
         inserted = self._db.searches.insert_one(doc)
@@ -41,7 +41,7 @@ class MongoService:
         return str(inserted.inserted_id)
 
     def save_crawl(self, result: CrawlResult) -> str:
-        """Save a CrawlResult to the 'crawls' collection."""
+        """Сохраняет CrawlResult в коллекцию 'crawls'."""
         doc = result.to_dict()
         doc["saved_at"] = datetime.now(timezone.utc)
         inserted = self._db.crawls.insert_one(doc)
@@ -49,13 +49,13 @@ class MongoService:
         return str(inserted.inserted_id)
 
     # ------------------------------------------------------------------
-    # Read methods
+    # Методы чтения
     # ------------------------------------------------------------------
 
     def get_recent(self, collection: str, limit: int = 10) -> list:
-        """Return the most recent documents from any collection."""
+        """Возвращает самые недавние документы из любой коллекции."""
         cursor = self._db[collection].find(
             {},
-            {"_id": 0}               # exclude ObjectId — not JSON-serializable
+            {"_id": 0}               # исключаем ObjectId — не сериализуется в JSON
         ).sort("saved_at", -1).limit(limit)
         return list(cursor)

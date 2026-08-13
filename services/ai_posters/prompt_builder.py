@@ -1,24 +1,26 @@
 """
-prompt_builder — pure functions for AI image prompt construction.
+prompt_builder — чистые функции для построения промпта AI-изображения.
 
-Design decisions:
-    - Pure functions: no state, no side effects, no classes.
-      Same inputs always produce the same outputs. Easy to test.
-    - English only: all major AI image models are trained on English text.
-      Non-English prompts produce lower-quality results.
-    - Sakila descriptions are formulaic but useful:
+Решения проектирования:
+    - Чистые функции: без состояния, без побочных эффектов, без классов.
+      Одинаковые входные данные всегда дают одинаковый результат. Легко тестировать.
+    - Только английский: все основные модели AI-изображений обучены на английском
+      тексте. Промпты не на английском дают результат более низкого качества.
+    - Описания Sakila шаблонные, но полезные:
         "A [adj] [type] of a [char1] and a [char2] who must [verb] a [obj] in [place]"
-      They contain setting, characters, and action — exactly what image AI needs.
-    - negative_prompt is film-agnostic: we always prohibit the same things.
-    - Style can be chosen manually or detected automatically from genre.
+      Они содержат сеттинг, персонажей и действие — именно то, что нужно image-AI.
+    - negative_prompt не зависит от фильма: мы всегда запрещаем одно и то же.
+    - Стиль можно выбрать вручную или определить автоматически по жанру.
 
-Public API:
+Публичный API:
     build_prompt(title, genre, description, style='auto') -> tuple[str, str]
 """
 
-# ── Style keyword database ────────────────────────────────────────────
-# Each style maps to a list of visual descriptor phrases.
-# These are appended to the base cinematic keywords.
+# ── База ключевых слов стилей ────────────────────────────────────────
+# Каждый стиль сопоставлен со списком фраз-визуальных дескрипторов.
+# Они добавляются к базовым кинематографическим ключевым словам.
+# ВАЖНО: фразы намеренно на английском — см. docstring модуля выше
+# (модели AI-изображений обучены на английском, перевод ухудшит качество генерации).
 
 _STYLE_KEYWORDS: dict[str, list[str]] = {
     'netflix': [
@@ -80,9 +82,10 @@ _STYLE_KEYWORDS: dict[str, list[str]] = {
     ],
 }
 
-# ── Genre → style auto-mapping ────────────────────────────────────────
-# When style='auto', the genre determines which style keywords to use.
-# Genre names match the Sakila `category` table values (case-insensitive).
+# ── Авто-сопоставление жанр → стиль ────────────────────────────────────
+# Когда style='auto', жанр определяет, какие ключевые слова стиля использовать.
+# Названия жанров совпадают со значениями таблицы `category` Sakila
+# (регистр не важен).
 
 _GENRE_TO_STYLE: dict[str, str] = {
     'action':      'dark',
@@ -105,10 +108,12 @@ _GENRE_TO_STYLE: dict[str, str] = {
     'foreign':     'art-house',
 }
 
-# ── Genre atmosphere phrases ──────────────────────────────────────────
-# Short atmospheric descriptors added per genre to reinforce the mood.
-# These are separate from style keywords — a 'dark' comedy still gets
-# "comedic atmosphere" but also dark visual treatment.
+# ── Фразы атмосферы по жанрам ──────────────────────────────────────────
+# Короткие атмосферные дескрипторы, добавляемые для каждого жанра,
+# чтобы усилить настроение. Они отдельны от ключевых слов стиля —
+# «мрачная» комедия всё равно получает "comedic atmosphere",
+# но и мрачную визуальную обработку тоже.
+# ВАЖНО: фразы намеренно на английском — см. docstring модуля выше.
 
 _GENRE_ATMOSPHERE: dict[str, str] = {
     'action':      'explosive action-packed atmosphere',
@@ -131,7 +136,7 @@ _GENRE_ATMOSPHERE: dict[str, str] = {
     'travel':      'adventurous journey atmosphere, exotic landscapes',
 }
 
-# ── Base and negative prompts ─────────────────────────────────────────
+# ── Базовый и негативный промпты ─────────────────────────────────────────
 
 _BASE_KEYWORDS: list[str] = [
     'cinematic movie poster',
@@ -143,7 +148,7 @@ _BASE_KEYWORDS: list[str] = [
     'masterful cinematography',
 ]
 
-# negative_prompt is film-agnostic — always prohibit the same elements
+# negative_prompt не зависит от фильма — всегда запрещаем одни и те же элементы
 _NEGATIVE_PROMPT: str = (
     'text, letters, words, numbers, title text, movie title, '
     'logos, watermarks, signatures, stamps, '
@@ -155,7 +160,7 @@ _NEGATIVE_PROMPT: str = (
 )
 
 
-# ── Public API ────────────────────────────────────────────────────────
+# ── Публичный API ────────────────────────────────────────────────────────
 
 def build_prompt(
     title: str,
@@ -164,45 +169,45 @@ def build_prompt(
     style: str = 'auto',
 ) -> tuple[str, str]:
     """
-    Build a cinematic image prompt from film metadata.
+    Строит кинематографический промпт изображения из метаданных фильма.
 
-    Args:
-        title:       Film title (e.g. 'ACADEMY DINOSAUR').
-        genre:       Genre name matching Sakila category (e.g. 'Action').
-        description: Sakila film description. Contains setting, characters,
-                     and plot — valuable visual material for the AI.
-        style:       Visual style. Use 'auto' to detect from genre.
-                     Options: 'netflix', 'disney', 'pixar', 'anime',
+    Аргументы:
+        title:       Название фильма (например, 'ACADEMY DINOSAUR').
+        genre:       Название жанра, совпадающее с категорией Sakila (например, 'Action').
+        description: Описание фильма из Sakila. Содержит сеттинг, персонажей
+                     и сюжет — ценный визуальный материал для AI.
+        style:       Визуальный стиль. 'auto' определяет по жанру.
+                     Варианты: 'netflix', 'disney', 'pixar', 'anime',
                               'vintage', 'dark', 'sci-fi', 'colorful',
                               'art-house', 'auto'.
 
-    Returns:
-        (prompt, negative_prompt) — both ready for any AI image provider.
+    Возвращает:
+        (prompt, negative_prompt) — оба готовы для любого AI-провайдера изображений.
     """
     resolved_style = _resolve_style(style, genre)
     genre_lower = (genre or '').lower()
 
     parts: list[str] = []
 
-    # 1. Base cinematic keywords
+    # 1. Базовые кинематографические ключевые слова
     parts.extend(_BASE_KEYWORDS)
 
-    # 2. Style-specific keywords
+    # 2. Ключевые слова конкретного стиля
     parts.extend(_STYLE_KEYWORDS.get(resolved_style, []))
 
-    # 3. Genre atmosphere
+    # 3. Атмосфера жанра
     atmosphere = _GENRE_ATMOSPHERE.get(genre_lower, '')
     if atmosphere:
         parts.append(atmosphere)
 
-    # 4. Description themes — the most unique part per film.
-    #    Sakila descriptions contain setting and characters — great for AI.
+    # 4. Темы из описания — самая уникальная часть для каждого фильма.
+    #    Описания Sakila содержат сеттинг и персонажей — отлично для AI.
     if description:
         theme = _extract_theme(description)
         if theme:
             parts.append(f"inspired by: {theme}")
 
-    # 5. Title hint — helps AI focus on the subject without adding text
+    # 5. Подсказка по названию — помогает AI сфокусироваться на сюжете без добавления текста
     if title:
         parts.append(f"visual subject based on '{title}'")
 
@@ -212,18 +217,18 @@ def build_prompt(
 
 def resolve_style_for_genre(genre: str) -> str:
     """
-    Return the visual style that would be auto-selected for this genre.
-    Useful for logging and debugging.
+    Возвращает визуальный стиль, который был бы автоматически выбран для этого жанра.
+    Полезно для логирования и отладки.
     """
     return _resolve_style('auto', genre)
 
 
-# ── Private helpers ───────────────────────────────────────────────────
+# ── Приватные вспомогательные функции ───────────────────────────────────────────
 
 def _resolve_style(style: str, genre: str) -> str:
     """
-    Resolve 'auto' to a concrete style name using the genre mapping.
-    Unknown genres fall back to 'netflix' (neutral, cinematic default).
+    Преобразует 'auto' в конкретное название стиля через сопоставление жанров.
+    Неизвестные жанры откатываются на 'netflix' (нейтральный кинематографический вариант).
     """
     if style and style != 'auto':
         return style if style in _STYLE_KEYWORDS else 'netflix'
@@ -233,16 +238,16 @@ def _resolve_style(style: str, genre: str) -> str:
 
 def _extract_theme(description: str, max_chars: int = 200) -> str:
     """
-    Extract the visual theme from a Sakila film description.
+    Извлекает визуальную тему из описания фильма Sakila.
 
-    Sakila descriptions follow a formula:
+    Описания Sakila следуют шаблону:
         "A [adj] [type] of a [char1] and a [char2] who must [verb] [obj] in [place]"
 
-    We take the full description (up to max_chars) — AI models parse
-    natural language well and extract setting, characters, and action.
+    Берём полное описание (до max_chars) — модели AI хорошо разбирают
+    естественный язык и извлекают сеттинг, персонажей и действие.
     """
     cleaned = description.strip()
     if len(cleaned) > max_chars:
-        # Cut at the last space before the limit to avoid splitting words
+        # Обрезаем на последнем пробеле перед лимитом, чтобы не разрывать слова
         cleaned = cleaned[:max_chars].rsplit(' ', 1)[0] + '...'
     return cleaned

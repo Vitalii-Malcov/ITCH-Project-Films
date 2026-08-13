@@ -1,14 +1,15 @@
 """
-Custom exception hierarchy for the ai_posters module.
+Иерархия пользовательских исключений модуля ai_posters.
 
-Why a hierarchy instead of one generic exception:
-    Flask (or any caller) can catch PosterError to handle all failures,
-    or catch a specific subclass to react differently to each failure type.
+Зачем иерархия, а не одно общее исключение:
+    Flask (или любой другой вызывающий код) может ловить PosterError,
+    чтобы обработать все ошибки разом, или ловить конкретный подкласс,
+    чтобы реагировать по-разному на каждый тип ошибки.
 """
 
 
 class PosterError(Exception):
-    """Base exception for all ai_posters errors."""
+    """Базовое исключение для всех ошибок ai_posters."""
 
     def __init__(self, message: str, details: str = ""):
         self.details = details
@@ -21,7 +22,7 @@ class PosterError(Exception):
 
 
 class ProviderError(PosterError):
-    """Raised when the AI image provider fails or returns an error response."""
+    """Выбрасывается, когда AI-провайдер изображений падает или возвращает ошибку."""
 
     def __init__(self, message: str, provider: str = "", details: str = ""):
         self.provider = provider
@@ -29,16 +30,16 @@ class ProviderError(PosterError):
 
 
 class ProviderConfigurationError(ProviderError):
-    """Raised when a required provider configuration is missing (e.g. API key)."""
+    """Выбрасывается, когда отсутствует обязательная настройка провайдера (например, API-ключ)."""
 
 
 class ProviderRateLimitError(ProviderError):
-    """Raised when the provider API rate limit is exceeded."""
+    """Выбрасывается при превышении лимита запросов API провайдера."""
 
 
 class StorageError(PosterError):
-    """Raised when saving or reading an image file fails."""
+    """Выбрасывается при ошибке сохранения или чтения файла изображения."""
 
 
 class RepositoryError(PosterError):
-    """Raised when a database read or write operation fails."""
+    """Выбрасывается при ошибке чтения или записи в базу данных."""

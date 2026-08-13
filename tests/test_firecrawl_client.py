@@ -1,25 +1,25 @@
 """
-Unit tests for FirecrawlClient.
+Unit-тесты для FirecrawlClient.
 
-Rules:
-- No real Firecrawl API calls (V1FirecrawlApp is mocked).
-- No real .env loading (load_dotenv is patched).
-- No network access.
-- Tests are independent — no shared mutable state.
+Правила:
+- Никаких реальных вызовов Firecrawl API (V1FirecrawlApp замокан).
+- Никакой реальной загрузки .env (load_dotenv запатчен).
+- Никакого сетевого доступа.
+- Тесты независимы — нет общего изменяемого состояния.
 """
 import pytest
 from unittest.mock import MagicMock, patch
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Helpers
+# Вспомогательные функции
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _make_client(api_key="test-key-placeholder"):
-    """Build a FirecrawlClient with V1FirecrawlApp replaced by a MagicMock.
+    """Строит FirecrawlClient с V1FirecrawlApp, заменённым на MagicMock.
 
-    Returns (client, mock_app) so tests can configure mock_app.scrape_url etc.
-    The patch context is exited before returning; client._app remains the mock.
+    Возвращает (client, mock_app), чтобы тесты могли настраивать mock_app.scrape_url и т.д.
+    Контекст patch завершается до возврата; client._app остаётся моком.
     """
     from services.firecrawl.client import FirecrawlClient
 
@@ -27,12 +27,12 @@ def _make_client(api_key="test-key-placeholder"):
     with patch("services.firecrawl.client.load_dotenv"):
         with patch("services.firecrawl.client.V1FirecrawlApp", return_value=mock_app):
             client = FirecrawlClient(api_key=api_key)
-    # client._app was set to mock_app inside __init__; patch exit does not change it
+    # client._app был установлен в mock_app внутри __init__; выход из patch это не меняет
     return client, mock_app
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Initialization
+# Инициализация
 # ──────────────────────────────────────────────────────────────────────────────
 
 class TestFirecrawlClientInit:
@@ -66,7 +66,7 @@ class TestFirecrawlClientInit:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# URL validation
+# Валидация URL
 # ──────────────────────────────────────────────────────────────────────────────
 
 class TestUrlValidation:
@@ -113,7 +113,7 @@ class TestUrlValidation:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Scrape — successful response mapping
+# Scrape — маппинг успешного ответа
 # ──────────────────────────────────────────────────────────────────────────────
 
 class TestScrapeResponseMapping:
@@ -159,7 +159,7 @@ class TestScrapeResponseMapping:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Exception mapping (_raise_mapped)
+# Маппинг исключений (_raise_mapped)
 # ──────────────────────────────────────────────────────────────────────────────
 
 class TestExceptionMapping:
@@ -221,7 +221,7 @@ class TestExceptionMapping:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Search argument validation
+# Валидация аргументов search
 # ──────────────────────────────────────────────────────────────────────────────
 
 class TestSearchValidation:
@@ -253,7 +253,7 @@ class TestSearchValidation:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Crawl argument validation
+# Валидация аргументов crawl
 # ──────────────────────────────────────────────────────────────────────────────
 
 class TestCrawlValidation:

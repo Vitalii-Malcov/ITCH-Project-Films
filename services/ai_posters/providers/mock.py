@@ -1,18 +1,18 @@
 """
-MockProvider — development placeholder for AIImageProvider.
+MockProvider — заглушка для разработки, реализующая AIImageProvider.
 
-What it does:
-    Generates a solid-colour WebP image using Pillow.
-    The colour is picked from the genre/style hints in the prompt,
-    so each film's poster at least differs by hue.
+Что делает:
+    Генерирует WebP-изображение сплошного цвета через Pillow.
+    Цвет выбирается по жанровым/стилевым подсказкам в промпте,
+    поэтому постер каждого фильма хотя бы отличается оттенком.
 
-Why Pillow instead of pure Python:
-    WebP is a complex binary format. Writing valid WebP bytes manually
-    requires implementing the VP8L bitstream — hundreds of lines.
-    Pillow handles encoding in one line and produces a real WebP file
-    that browsers and Flask can serve directly.
+Почему Pillow, а не чистый Python:
+    WebP — сложный бинарный формат. Написать корректные WebP-байты вручную
+    означает реализовать битовый поток VP8L — сотни строк кода.
+    Pillow кодирует изображение одной строкой и создаёт настоящий WebP-файл,
+    который браузеры и Flask могут отдавать напрямую.
 
-Replace this with a real provider when ready:
+Заменить на настоящего провайдера, когда будет готов:
     class OpenAIProvider(AIImageProvider): ...
     service = PosterService(provider=OpenAIProvider(...), ...)
 """
@@ -27,9 +27,9 @@ from services.ai_posters.exceptions import ProviderError
 
 logger = logging.getLogger(__name__)
 
-# Colour palette matching ITCH Films design — saturated enough to stay
-# visible as a placeholder tile against the site's dark theme background.
-# Each genre maps to an RGB tuple used as the poster background.
+# Цветовая палитра, подобранная под дизайн ITCH Films — достаточно
+# насыщенная, чтобы плейсхолдер оставался заметным на тёмном фоне сайта.
+# Каждый жанр сопоставлен с RGB-кортежем, используемым как фон постера.
 _GENRE_COLORS: dict[str, tuple[int, int, int]] = {
     'action':      (120, 45, 30),
     'horror':      (45,  40, 90),
@@ -44,11 +44,11 @@ _GENRE_COLORS: dict[str, tuple[int, int, int]] = {
     'music':       (140, 40, 130),
     'sports':      (40,  120, 60),
 }
-_DEFAULT_COLOR: tuple[int, int, int] = (80, 80, 120)  # visible blue-grey
+_DEFAULT_COLOR: tuple[int, int, int] = (80, 80, 120)  # заметный сине-серый
 
 
 def _color_from_prompt(prompt: str) -> tuple[int, int, int]:
-    """Pick a background colour based on genre keywords in the prompt."""
+    """Выбирает цвет фона по жанровым ключевым словам в промпте."""
     prompt_lower = prompt.lower()
     for genre, color in _GENRE_COLORS.items():
         if genre in prompt_lower:
@@ -58,11 +58,11 @@ def _color_from_prompt(prompt: str) -> tuple[int, int, int]:
 
 class MockProvider(AIImageProvider):
     """
-    Generates a solid-colour WebP without calling any external API.
-    Safe to use in development, CI, and demo environments.
+    Генерирует WebP сплошного цвета без обращения к внешнему API.
+    Безопасен для использования в разработке, CI и демо-окружениях.
     """
 
-    # Simulated latency in seconds — keeps timing realistic for testing
+    # Имитация задержки в секундах — делает тайминг реалистичным для тестов
     _FAKE_LATENCY: float = 0.05
 
     def generate(
@@ -97,8 +97,8 @@ class MockProvider(AIImageProvider):
             webp_bytes = buf.getvalue()
 
             logger.debug(
-                f"MockProvider generated {width}×{height} WebP "
-                f"({len(webp_bytes)} bytes) color={color}"
+                f"MockProvider сгенерировал WebP {width}×{height} "
+                f"({len(webp_bytes)} байт) color={color}"
             )
             return webp_bytes
 
@@ -110,7 +110,7 @@ class MockProvider(AIImageProvider):
             ) from exc
 
     def health_check(self) -> bool:
-        """MockProvider is always available."""
+        """MockProvider всегда доступен."""
         return True
 
     def provider_name(self) -> str:

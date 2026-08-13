@@ -1,4 +1,4 @@
-# Public API — expanded as each stage is implemented.
+# Публичный API — расширяется по мере реализации каждого этапа.
 from services.ai_posters.exceptions import (
     PosterError,
     ProviderError,

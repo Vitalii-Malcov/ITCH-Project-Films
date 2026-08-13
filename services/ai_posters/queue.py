@@ -1,26 +1,26 @@
 """
-GenerationQueue — manages the movie poster generation queue.
+GenerationQueue — управляет очередью генерации постеров фильмов.
 
-Responsibilities:
-    - Create and manage the movie_generation_queue table.
-    - Add films to the queue (enqueue).
-    - Retrieve pending items in priority order for the generator script.
-    - Track status transitions: pending → processing → done / failed.
+Обязанности:
+    - Создавать и обслуживать таблицу movie_generation_queue.
+    - Добавлять фильмы в очередь (enqueue).
+    - Извлекать ожидающие элементы в порядке приоритета для скрипта-генератора.
+    - Отслеживать переходы статуса: pending → processing → done / failed.
 
-What it does NOT do:
-    - Generate images (that is PosterService's job).
-    - Know about prompts, providers, or file storage.
+Чего НЕ делает:
+    - Не генерирует изображения (это задача PosterService).
+    - Не знает про промпты, провайдеров или файловое хранилище.
 
-Status lifecycle:
-    pending     — waiting to be picked up by the generator
-    processing  — currently being generated (avoids duplicate work)
-    done        — successfully completed
-    failed      — generation failed (tries counter incremented)
+Жизненный цикл статуса:
+    pending     — ожидает, пока генератор не заберёт задачу
+    processing  — сейчас генерируется (избегает дублирования работы)
+    done        — успешно завершено
+    failed      — генерация не удалась (счётчик tries увеличивается)
 
-Priority:
-    Higher number = processed first.
-    Default = 5. Use priority=10 for urgent re-runs.
-    Within the same priority, older items are processed first (FIFO).
+Приоритет:
+    Чем выше число — тем раньше обрабатывается.
+    По умолчанию = 5. Используйте priority=10 для срочных перегенераций.
+    В рамках одного приоритета более старые элементы обрабатываются первыми (FIFO).
 """
 
 import os
@@ -33,7 +33,7 @@ from services.ai_posters.exceptions import RepositoryError
 
 logger = logging.getLogger(__name__)
 
-# ── sys.path setup ────────────────────────────────────────────────────
+# ── Настройка sys.path ────────────────────────────────────────────────────
 _project_root = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
@@ -58,9 +58,9 @@ CREATE TABLE IF NOT EXISTS movie_generation_queue (
 
 
 class GenerationQueue:
-    """Manages the movie poster generation queue in the write database."""
+    """Управляет очередью генерации постеров фильмов в write-базе данных."""
 
-    # ── Connection ────────────────────────────────────────────────────
+    # ── Подключение ────────────────────────────────────────────────────
 
     def _connect(self):
         try:
@@ -74,13 +74,13 @@ class GenerationQueue:
     # ── DDL ───────────────────────────────────────────────────────────
 
     def create_table(self) -> None:
-        """Create movie_generation_queue table if it does not exist."""
+        """Создаёт таблицу movie_generation_queue, если она не существует."""
         conn = self._connect()
         cursor = conn.cursor()
         try:
             cursor.execute(_CREATE_TABLE_SQL)
             conn.commit()
-            logger.info("movie_generation_queue table is ready.")
+            logger.info("Таблица movie_generation_queue готова.")
         except mysql.connector.Error as exc:
             raise RepositoryError(
                 "Queue: failed to create table.",
@@ -90,15 +90,15 @@ class GenerationQueue:
             cursor.close()
             conn.close()
 
-    # ── Write ─────────────────────────────────────────────────────────
+    # ── Запись ─────────────────────────────────────────────────────────
 
     def enqueue(self, film_id: int, priority: int = 5) -> None:
         """
-        Add a film to the queue if it is not already present.
+        Добавляет фильм в очередь, если его там ещё нет.
 
-        INSERT IGNORE respects the UNIQUE constraint on film_id —
-        a film already in the queue (any status) is silently skipped.
-        This makes enqueue safe to call multiple times for the same film.
+        INSERT IGNORE учитывает ограничение UNIQUE на film_id —
+        фильм, уже находящийся в очереди (в любом статусе), молча пропускается.
+        Это делает enqueue безопасным для многократного вызова с одним и тем же фильмом.
         """
         conn = self._connect()
         cursor = conn.cursor()
@@ -110,7 +110,7 @@ class GenerationQueue:
             )
             conn.commit()
             if cursor.rowcount:
-                logger.debug(f"Enqueued film_id={film_id} priority={priority}")
+                logger.debug(f"В очередь добавлен film_id={film_id} priority={priority}")
         except mysql.connector.Error as exc:
             raise RepositoryError(
                 f"Queue: failed to enqueue film_id={film_id}.",
@@ -122,10 +122,10 @@ class GenerationQueue:
 
     def bulk_enqueue(self, film_ids: list[int], priority: int = 5) -> int:
         """
-        Add multiple films to the queue in a single INSERT statement.
+        Добавляет несколько фильмов в очередь одним INSERT-запросом.
 
-        Returns the number of newly added rows (duplicates are ignored).
-        Use this instead of calling enqueue() in a loop to avoid N round-trips.
+        Возвращает количество новых добавленных строк (дубли игнорируются).
+        Используйте вместо вызова enqueue() в цикле, чтобы избежать N round-trip'ов.
         """
         if not film_ids:
             return 0
@@ -140,7 +140,7 @@ class GenerationQueue:
             )
             conn.commit()
             inserted = cursor.rowcount
-            logger.debug(f"bulk_enqueue: {inserted} new items from {len(film_ids)} films")
+            logger.debug(f"bulk_enqueue: {inserted} новых записей из {len(film_ids)} фильмов")
             return inserted
         except mysql.connector.Error as exc:
             raise RepositoryError(
@@ -152,15 +152,15 @@ class GenerationQueue:
             conn.close()
 
     def mark_processing(self, queue_id: int) -> None:
-        """Mark a queue item as currently being processed."""
+        """Помечает элемент очереди как находящийся в обработке."""
         self._update_status(queue_id, 'processing')
 
     def mark_done(self, queue_id: int) -> None:
-        """Mark a queue item as successfully completed."""
+        """Помечает элемент очереди как успешно завершённый."""
         self._update_status(queue_id, 'done')
 
     def mark_failed(self, queue_id: int) -> None:
-        """Mark a queue item as failed and increment the tries counter."""
+        """Помечает элемент очереди как неудачный и увеличивает счётчик tries."""
         conn = self._connect()
         cursor = conn.cursor()
         try:
@@ -171,7 +171,7 @@ class GenerationQueue:
                 (queue_id,),
             )
             conn.commit()
-            logger.warning(f"Queue item id={queue_id} marked as failed.")
+            logger.warning(f"Элемент очереди id={queue_id} помечен как failed.")
         except mysql.connector.Error as exc:
             raise RepositoryError(
                 f"Queue: failed to mark item {queue_id} as failed.",
@@ -181,14 +181,15 @@ class GenerationQueue:
             cursor.close()
             conn.close()
 
-    # ── Read ──────────────────────────────────────────────────────────
+    # ── Чтение ──────────────────────────────────────────────────────────
 
     def get_pending(self, limit: int = 10) -> list[dict]:
         """
-        Return up to `limit` pending queue items.
+        Возвращает до `limit` элементов очереди в статусе pending.
 
-        Ordered by priority DESC (higher number = processed first),
-        then by film_id ASC (predictable, repeatable order within the same priority).
+        Сортировка по priority DESC (чем выше число — тем раньше обрабатывается),
+        затем по film_id ASC (предсказуемый, повторяемый порядок в рамках
+        одного приоритета).
         """
         conn = self._connect()
         cursor = conn.cursor(dictionary=True)
@@ -212,8 +213,8 @@ class GenerationQueue:
 
     def get_stats(self) -> dict[str, int]:
         """
-        Return item counts grouped by status.
-        Example: {'pending': 5, 'done': 100, 'failed': 2}
+        Возвращает количество элементов, сгруппированных по статусу.
+        Пример: {'pending': 5, 'done': 100, 'failed': 2}
         """
         conn = self._connect()
         cursor = conn.cursor()
@@ -240,28 +241,28 @@ class GenerationQueue:
         processing_timeout_minutes: int = 30,
     ) -> dict[str, int]:
         """
-        Synchronise the queue against completed OpenAI posters (source of truth).
+        Синхронизирует очередь с завершёнными постерами OpenAI (источник истины).
 
-        Per-status rules for films WITHOUT a completed OpenAI poster:
-          'done'       → 'pending'   (was completed by MockProvider; needs real generation)
-          'pending'    → unchanged   (already waiting; do not disturb)
-          'failed'     → unchanged   (explicit error; use --retry-failed to re-queue)
-          'processing' → 'pending' only if age_minutes >= processing_timeout_minutes
-                         (stuck from a crashed run); otherwise unchanged
-          missing      → INSERT 'pending'
+        Правила по статусам для фильмов БЕЗ завершённого постера OpenAI:
+          'done'       → 'pending'   (был завершён MockProvider; нужна настоящая генерация)
+          'pending'    → без изменений (уже ждёт; не трогаем)
+          'failed'     → без изменений (явная ошибка; используйте --retry-failed для повтора)
+          'processing' → 'pending' только если age_minutes >= processing_timeout_minutes
+                         (зависло после падения запуска); иначе без изменений
+          отсутствует  → INSERT 'pending'
 
-        For films WITH a completed OpenAI poster:
-          any status   → 'done' (or unchanged if already 'done')
-          missing      → INSERT 'done'
+        Для фильмов С завершённым постером OpenAI:
+          любой статус  → 'done' (или без изменений, если уже 'done')
+          отсутствует   → INSERT 'done'
 
-        tries and created_at of existing rows are preserved.
+        tries и created_at существующих строк сохраняются.
 
-        Returns:
+        Возвращает:
             {
-              'inserted':       new queue entries created,
-              'set_to_pending': existing entries changed to 'pending',
-              'set_to_done':    existing entries changed to 'done',
-              'unchanged':      entries left at their current status,
+              'inserted':       созданные новые записи очереди,
+              'set_to_pending': существующие записи, изменённые на 'pending',
+              'set_to_done':    существующие записи, изменённые на 'done',
+              'unchanged':      записи, оставленные в текущем статусе,
             }
         """
         if not all_film_ids:
@@ -270,7 +271,7 @@ class GenerationQueue:
         conn = self._connect()
         cursor = conn.cursor(dictionary=True)
         try:
-            # Fetch current queue state plus age for processing detection
+            # Получаем текущее состояние очереди плюс возраст для определения зависших задач
             placeholders = ', '.join(['%s'] * len(all_film_ids))
             cursor.execute(
                 f"SELECT film_id, status, "
@@ -293,7 +294,7 @@ class GenerationQueue:
                 row = existing.get(fid)
 
                 if fid in completed_openai_film_ids:
-                    # Film has a completed OpenAI poster → must be 'done'
+                    # У фильма есть завершённый постер OpenAI → должен быть 'done'
                     if row is None:
                         to_insert_done.append(fid)
                     elif row['status'] == 'done':
@@ -301,21 +302,21 @@ class GenerationQueue:
                     else:
                         to_set_done.append(fid)
                 else:
-                    # No completed OpenAI poster — per-status rules
+                    # Нет завершённого постера OpenAI — правила по статусам
                     if row is None:
                         to_insert_pending.append(fid)
                     elif row['status'] == 'done':
-                        to_set_pending.append(fid)       # was mock-done; re-queue
+                        to_set_pending.append(fid)       # был mock-done; ставим в очередь заново
                     elif row['status'] == 'pending':
                         unchanged += 1
                     elif row['status'] == 'failed':
-                        unchanged += 1                   # leave; use --retry-failed
+                        unchanged += 1                   # оставляем; используйте --retry-failed
                     elif row['status'] == 'processing':
                         age = row.get('age_minutes') or 0
                         if age >= processing_timeout_minutes:
-                            to_set_pending.append(fid)   # stuck run; reset
+                            to_set_pending.append(fid)   # зависший запуск; сбрасываем
                         else:
-                            unchanged += 1               # still active; leave it
+                            unchanged += 1               # ещё активен; оставляем
 
             if to_insert_pending:
                 cursor.executemany(
@@ -351,7 +352,7 @@ class GenerationQueue:
 
             inserted = len(to_insert_pending) + len(to_insert_done)
             logger.info(
-                "Queue sync: inserted=%d set_pending=%d set_done=%d unchanged=%d",
+                "Синхронизация очереди: inserted=%d set_pending=%d set_done=%d unchanged=%d",
                 inserted, len(to_set_pending), len(to_set_done), unchanged,
             )
 
@@ -373,11 +374,12 @@ class GenerationQueue:
 
     def retry_failed(self, film_id: int | None = None) -> int:
         """
-        Reset failed queue items to 'pending' for explicit retry.
+        Сбрасывает элементы очереди со статусом failed обратно в 'pending'
+        для явного повтора.
 
-        If film_id is provided: only that film is reset.
-        Otherwise: all failed items are reset.
-        Returns the number of items changed.
+        Если указан film_id: сбрасывается только этот фильм.
+        Иначе: сбрасываются все неудачные элементы.
+        Возвращает количество изменённых элементов.
         """
         conn = self._connect()
         cursor = conn.cursor()
@@ -395,7 +397,7 @@ class GenerationQueue:
                 )
             count = cursor.rowcount
             conn.commit()
-            logger.info("retry_failed: %d item(s) reset to pending (film_id=%s)", count, film_id)
+            logger.info("retry_failed: сброшено в pending %d элемент(ов) (film_id=%s)", count, film_id)
             return count
         except mysql.connector.Error as exc:
             raise RepositoryError(
@@ -407,7 +409,7 @@ class GenerationQueue:
             conn.close()
 
     def count_by_status(self, status: str) -> int:
-        """Return the number of queue items with the given status."""
+        """Возвращает количество элементов очереди с заданным статусом."""
         conn = self._connect()
         cursor = conn.cursor()
         try:
@@ -425,7 +427,7 @@ class GenerationQueue:
             cursor.close()
             conn.close()
 
-    # ── Private helper ────────────────────────────────────────────────
+    # ── Приватный вспомогательный метод ────────────────────────────────────
 
     def _update_status(self, queue_id: int, status: str) -> None:
         conn = self._connect()
@@ -436,7 +438,7 @@ class GenerationQueue:
                 (status, queue_id),
             )
             conn.commit()
-            logger.debug(f"Queue item id={queue_id} → {status}")
+            logger.debug(f"Элемент очереди id={queue_id} → {status}")
         except mysql.connector.Error as exc:
             raise RepositoryError(
                 f"Queue: failed to set status={status} for id={queue_id}.",

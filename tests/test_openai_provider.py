@@ -1,11 +1,11 @@
 """
-Unit tests for OpenAIProvider.
+Unit-тесты для OpenAIProvider.
 
-Rules:
-    - No real OpenAI API calls — openai.OpenAI is mocked throughout.
-    - No .env is loaded — env vars are set via monkeypatch.
-    - No file I/O — images are inspected in memory.
-    - Tests are independent.
+Правила:
+    - Никаких реальных вызовов OpenAI API — openai.OpenAI замокан везде.
+    - .env не загружается — переменные окружения задаются через monkeypatch.
+    - Никакого файлового I/O — изображения проверяются в памяти.
+    - Тесты независимы.
 """
 
 import base64
@@ -14,10 +14,10 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Вспомогательные функции ───────────────────────────────────────────────────────────
 
 def _make_png_bytes(width: int = 4, height: int = 4) -> bytes:
-    """Return raw bytes of a minimal valid PNG image."""
+    """Возвращает сырые байты минимально корректного PNG-изображения."""
     from PIL import Image
     img = Image.new("RGB", (width, height), color=(80, 120, 200))
     buf = io.BytesIO()
@@ -26,7 +26,7 @@ def _make_png_bytes(width: int = 4, height: int = 4) -> bytes:
 
 
 def _make_webp_bytes(width: int = 4, height: int = 4) -> bytes:
-    """Return raw bytes of a minimal valid WebP image."""
+    """Возвращает сырые байты минимально корректного WebP-изображения."""
     from PIL import Image
     img = Image.new("RGB", (width, height), color=(30, 60, 90))
     buf = io.BytesIO()
@@ -40,10 +40,10 @@ def _b64(data: bytes) -> str:
 
 def _make_provider(model: str = "gpt-image-2") -> "OpenAIProvider":
     """
-    Build an OpenAIProvider with a MagicMock client.
+    Строит OpenAIProvider с клиентом-MagicMock.
 
-    openai.OpenAI is patched during __init__ to prevent any real HTTP client.
-    _client is then replaced with a fresh MagicMock for per-test configuration.
+    openai.OpenAI патчится во время __init__, чтобы не создавался реальный HTTP-клиент.
+    Затем _client заменяется на свежий MagicMock для настройки в каждом тесте.
     """
     from services.ai_posters.providers.openai_provider import OpenAIProvider
     with patch("openai.OpenAI"):
@@ -53,7 +53,7 @@ def _make_provider(model: str = "gpt-image-2") -> "OpenAIProvider":
 
 
 def _mock_b64_response(image_bytes: bytes) -> MagicMock:
-    """Build a mock API response with b64_json image data."""
+    """Строит мок ответа API с данными изображения в b64_json."""
     item = MagicMock()
     item.b64_json = _b64(image_bytes)
     item.url = None
@@ -62,7 +62,7 @@ def _mock_b64_response(image_bytes: bytes) -> MagicMock:
     return resp
 
 
-# ── 1. Initialisation ─────────────────────────────────────────────────────────
+# ── 1. Инициализация ─────────────────────────────────────────────────────────
 
 class TestOpenAIProviderInit:
 
@@ -123,10 +123,10 @@ class TestOpenAIProviderInit:
         assert provider.model_name() == "dall-e-3"
 
 
-# ── 2. Size mapping ───────────────────────────────────────────────────────────
+# ── 2. Сопоставление размеров ───────────────────────────────────────────────────────────
 
 class TestSizeMappingGptImage:
-    """GPT Image (gpt-image-2) uses 1024x1536 portrait, 1536x1024 landscape."""
+    """GPT Image (gpt-image-2) использует 1024x1536 портрет, 1536x1024 альбом."""
 
     @pytest.fixture
     def provider(self):
@@ -142,12 +142,12 @@ class TestSizeMappingGptImage:
         assert provider._map_size(1024, 1024) == "1024x1024"
 
     def test_default_poster_dims_give_portrait(self, provider):
-        """PosterService default 640x960 should produce GPT Image portrait size."""
+        """Размеры по умолчанию PosterService 640x960 должны давать портретный размер GPT Image."""
         assert provider._map_size(640, 960) == "1024x1536"
 
 
 class TestSizeMappingDalle3:
-    """DALL-E 3 keeps its own valid sizes."""
+    """DALL-E 3 использует свои собственные допустимые размеры."""
 
     @pytest.fixture
     def provider(self):
@@ -164,7 +164,7 @@ class TestSizeMappingDalle3:
 
 
 class TestSizeMappingDalle2:
-    """DALL-E 2 snaps to nearest supported square."""
+    """DALL-E 2 округляется до ближайшего поддерживаемого квадрата."""
 
     def test_snaps_to_512(self):
         provider = _make_provider(model="dall-e-2")
@@ -175,7 +175,7 @@ class TestSizeMappingDalle2:
         assert provider._map_size(100, 100) == "256x256"
 
 
-# ── 3. API params (GPT Image path) ───────────────────────────────────────────
+# ── 3. Параметры API (путь GPT Image) ───────────────────────────────────────────
 
 class TestApiParamsGptImage:
 
@@ -184,7 +184,7 @@ class TestApiParamsGptImage:
         return _make_provider(model="gpt-image-2")
 
     def _call_generate_and_get_kwargs(self, provider, **gen_kwargs) -> dict:
-        """Generate with a mock response and return the API call kwargs."""
+        """Генерирует с моком ответа и возвращает kwargs вызова API."""
         provider._client.images.generate.return_value = _mock_b64_response(
             _make_webp_bytes()
         )
@@ -192,17 +192,17 @@ class TestApiParamsGptImage:
         return provider._client.images.generate.call_args.kwargs
 
     def test_api_called_with_quality_low(self, provider):
-        """Default quality must be 'low'."""
+        """Качество по умолчанию должно быть 'low'."""
         kwargs = self._call_generate_and_get_kwargs(provider)
         assert kwargs["quality"] == "low"
 
     def test_api_called_with_output_format_webp(self, provider):
-        """Default output_format must be 'webp' for GPT Image."""
+        """output_format по умолчанию должен быть 'webp' для GPT Image."""
         kwargs = self._call_generate_and_get_kwargs(provider)
         assert kwargs["output_format"] == "webp"
 
     def test_api_called_with_output_compression(self, provider):
-        """output_compression must be present for GPT Image."""
+        """output_compression должен присутствовать для GPT Image."""
         kwargs = self._call_generate_and_get_kwargs(provider)
         assert "output_compression" in kwargs
         assert isinstance(kwargs["output_compression"], int)
@@ -216,12 +216,12 @@ class TestApiParamsGptImage:
         assert kwargs["model"] == "gpt-image-2"
 
     def test_gpt_image_does_not_use_response_format(self, provider):
-        """GPT Image uses output_format, not the legacy response_format param."""
+        """GPT Image использует output_format, а не устаревший параметр response_format."""
         kwargs = self._call_generate_and_get_kwargs(provider)
         assert "response_format" not in kwargs
 
     def test_dalle3_uses_response_format_not_output_format(self):
-        """DALL-E 3 uses the legacy response_format='b64_json' path."""
+        """DALL-E 3 использует устаревший путь response_format='b64_json'."""
         provider = _make_provider(model="dall-e-3")
         provider._client.images.generate.return_value = _mock_b64_response(
             _make_png_bytes()
@@ -232,7 +232,7 @@ class TestApiParamsGptImage:
         assert "output_format" not in kwargs
 
 
-# ── 4. WebP output handling ───────────────────────────────────────────────────
+# ── 4. Обработка WebP на выходе ───────────────────────────────────────────────────
 
 class TestWebpHandling:
 
@@ -242,19 +242,19 @@ class TestWebpHandling:
 
     def test_native_webp_is_returned_unchanged(self, provider):
         """
-        When the API returns WebP bytes, _ensure_webp() must pass them through
-        without re-encoding (no quality loss, no Pillow roundtrip).
+        Когда API возвращает байты WebP, _ensure_webp() должен пропускать их
+        без перекодирования (без потери качества, без прохода через Pillow).
         """
         webp_bytes = _make_webp_bytes()
         provider._client.images.generate.return_value = _mock_b64_response(webp_bytes)
 
         result = provider.generate("poster prompt")
 
-        # Result must be the exact same bytes (no re-encoding)
+        # Результат должен быть точно теми же байтами (без перекодирования)
         assert result == webp_bytes
 
     def test_png_bytes_are_converted_to_webp(self, provider):
-        """When the API returns PNG (DALL-E path), Pillow must convert to WebP."""
+        """Когда API возвращает PNG (путь DALL-E), Pillow должен конвертировать в WebP."""
         from PIL import Image
 
         png_bytes = _make_png_bytes()
@@ -271,7 +271,7 @@ class TestWebpHandling:
             provider._ensure_webp(b"")
 
 
-# ── 5. Successful base64 generation ──────────────────────────────────────────
+# ── 5. Успешная генерация base64 ──────────────────────────────────────────
 
 class TestGenerateBase64:
 
@@ -288,7 +288,7 @@ class TestGenerateBase64:
         assert len(result) > 0
 
     def test_invalid_base64_raises_provider_error(self, provider):
-        """Corrupt base64 must raise ProviderError, not a raw exception."""
+        """Повреждённый base64 должен выбрасывать ProviderError, а не сырое исключение."""
         from services.ai_posters.exceptions import ProviderError
 
         item = MagicMock()
@@ -302,7 +302,7 @@ class TestGenerateBase64:
             provider.generate("test")
 
 
-# ── 6. URL fallback ───────────────────────────────────────────────────────────
+# ── 6. Fallback через URL ───────────────────────────────────────────────────────────
 
 class TestGenerateUrl:
 
@@ -311,7 +311,7 @@ class TestGenerateUrl:
         return _make_provider()
 
     def test_url_response_is_downloaded_and_ensured_webp(self, provider):
-        """When b64_json is absent, image is downloaded from url."""
+        """Когда b64_json отсутствует, изображение скачивается по url."""
         from PIL import Image
 
         png = _make_png_bytes()
@@ -329,7 +329,7 @@ class TestGenerateUrl:
         assert img.format == "WEBP"
 
 
-# ── 7. Empty / malformed response ────────────────────────────────────────────
+# ── 7. Пустой / некорректный ответ ────────────────────────────────────────────
 
 class TestEmptyResponse:
 
@@ -357,7 +357,7 @@ class TestEmptyResponse:
             provider.generate("test")
 
 
-# ── 8. SDK exception mapping ──────────────────────────────────────────────────
+# ── 8. Маппинг исключений SDK ──────────────────────────────────────────────────
 
 class TestExceptionMapping:
 
@@ -426,7 +426,7 @@ class TestExceptionMapping:
         assert exc_info.value.__cause__ is original
 
 
-# ── 9. Provider identity ──────────────────────────────────────────────────────
+# ── 9. Идентичность провайдера ──────────────────────────────────────────────────────
 
 class TestProviderIdentity:
 

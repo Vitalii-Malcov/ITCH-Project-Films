@@ -1,25 +1,25 @@
 """
 scripts/test_openai_poster.py
 ──────────────────────────────────────────────────────────────────────────────
-One-shot manual test for OpenAIProvider.
+Разовый ручной тест OpenAIProvider.
 
-What it does:
-    1. Loads .env (reads OPENAI_API_KEY and optional overrides).
-    2. Creates OpenAIProvider with the configured model and settings.
-    3. Builds a prompt for ACADEMY DINOSAUR via the existing prompt_builder.
-    4. Generates exactly ONE image.
-    5. Saves it to storage/posters/ via PosterStorage.
+Что делает:
+    1. Загружает .env (читает OPENAI_API_KEY и опциональные переопределения).
+    2. Создаёт OpenAIProvider с настроенной моделью и параметрами.
+    3. Строит промпт для ACADEMY DINOSAUR через существующий prompt_builder.
+    4. Генерирует ровно ОДНО изображение.
+    5. Сохраняет его в storage/posters/ через PosterStorage.
 
-What it does NOT do:
-    - Does NOT write to any database (movie_posters table is untouched).
-    - Does NOT add anything to the generation queue.
-    - Does NOT touch existing 1106 generated posters.
-    - Does NOT print the API key, not even masked.
+Чего НЕ делает:
+    - НЕ пишет ни в какую базу данных (таблица movie_posters не затрагивается).
+    - НЕ добавляет ничего в очередь генерации.
+    - НЕ трогает существующие 1106 сгенерированных постеров.
+    - НЕ печатает API-ключ, даже замаскированным.
 
-Usage (run from project root):
+Использование (запуск из корня проекта):
     python scripts/test_openai_poster.py
 
-Expected output:
+Ожидаемый вывод:
     ====================================================
       OpenAI Provider — Single Poster Test
     ====================================================
@@ -48,7 +48,7 @@ import os
 import sys
 import time
 
-# ── Path setup ────────────────────────────────────────────────────────────────
+# ── Настройка путей ────────────────────────────────────────────────────────────
 _script_dir   = os.path.dirname(os.path.abspath(__file__))
 _project_root = os.path.dirname(_script_dir)
 _itch_films   = os.path.join(_project_root, "itch_films")
@@ -79,25 +79,25 @@ TEST_FILM = {
 
 def main() -> None:
     print(LINE)
-    print("  OpenAI Provider — Single Poster Test")
+    print("  OpenAI Provider — тест генерации одного постера")
     print(LINE)
 
-    # ── 1. Check key presence — never reveal the value ────────────────────────
+    # ── 1. Проверяем наличие ключа — никогда не показываем значение ────────────
     key = os.getenv("OPENAI_API_KEY", "")
-    print(f"\n  API key      : {'configured' if key else 'MISSING'}")
+    print(f"\n  API key      : {'настроен' if key else 'ОТСУТСТВУЕТ'}")
     if not key:
-        print("\n[ERROR] OPENAI_API_KEY is not set in .env")
-        print("  Add: OPENAI_API_KEY=sk-...")
+        print("\n[ОШИБКА] OPENAI_API_KEY не задан в .env")
+        print("  Добавьте: OPENAI_API_KEY=sk-...")
         sys.exit(1)
 
-    # ── 2. Create provider ────────────────────────────────────────────────────
+    # ── 2. Создаём провайдера ────────────────────────────────────────────────────
     try:
         provider = OpenAIProvider()
     except ProviderConfigurationError as exc:
-        print(f"\n[CONFIG ERROR] {exc}")
+        print(f"\n[ОШИБКА КОНФИГУРАЦИИ] {exc}")
         sys.exit(1)
 
-    # Derive active size for reporting
+    # Вычисляем активный размер для отчёта
     portrait_size = provider._map_size(640, 960)
 
     print(f"  Provider     : {provider.provider_name()}")
@@ -107,19 +107,19 @@ def main() -> None:
     print(f"  Format       : {provider._output_fmt}")
     print(f"  Compression  : {provider._compression}")
 
-    # ── 3. Build prompt ───────────────────────────────────────────────────────
+    # ── 3. Строим промпт ───────────────────────────────────────────────────────
     prompt, negative_prompt = build_prompt(
         title=TEST_FILM["title"],
         genre=TEST_FILM["genre"],
         description=TEST_FILM["description"],
         style=TEST_FILM["style"],
     )
-    print(f"\n  Prompt ({len(prompt)} chars):")
+    print(f"\n  Промпт ({len(prompt)} символов):")
     print(f"  {prompt[:200]}...")
 
-    # ── 4. Generate one image ─────────────────────────────────────────────────
-    print(f"\n  Generating poster for: {TEST_FILM['title']}")
-    print("  (this may take 5–15 seconds)")
+    # ── 4. Генерируем одно изображение ─────────────────────────────────────────────────
+    print(f"\n  Генерируем постер для: {TEST_FILM['title']}")
+    print("  (это может занять 5–15 секунд)")
     start = time.monotonic()
 
     try:
@@ -128,20 +128,20 @@ def main() -> None:
             negative_prompt=negative_prompt,
         )
     except ProviderConfigurationError as exc:
-        print(f"\n[CONFIG ERROR] {exc}")
+        print(f"\n[ОШИБКА КОНФИГУРАЦИИ] {exc}")
         sys.exit(1)
     except ProviderError as exc:
-        print(f"\n[PROVIDER ERROR] {exc}")
+        print(f"\n[ОШИБКА ПРОВАЙДЕРА] {exc}")
         sys.exit(1)
 
     elapsed = round(time.monotonic() - start, 2)
 
-    # ── 5. Save file (no DB record) ───────────────────────────────────────────
+    # ── 5. Сохраняем файл (без записи в БД) ───────────────────────────────────────────
     storage = PosterStorage(STORAGE_DIR)
     filename = storage.save(image_bytes)
     path = storage.get_path(filename)
 
-    # ── 6. Report ─────────────────────────────────────────────────────────────
+    # ── 6. Отчёт ─────────────────────────────────────────────────────────────
     print()
     print(LINE)
     print(f"  Saved to    : {path}")
@@ -151,9 +151,9 @@ def main() -> None:
     print(f"  Model       : {provider.model_name()}")
     print(LINE)
     print()
-    print("  [OK] Test poster generated.")
-    print("  NOTE: file is NOT recorded in movie_posters table.")
-    print(f"  Open: {path}")
+    print("  [OK] Тестовый постер сгенерирован.")
+    print("  ПРИМЕЧАНИЕ: файл НЕ записан в таблицу movie_posters.")
+    print(f"  Открыть: {path}")
 
 
 if __name__ == "__main__":

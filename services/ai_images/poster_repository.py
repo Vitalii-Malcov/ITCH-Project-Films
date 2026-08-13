@@ -6,7 +6,7 @@ import mysql.connector
 
 logger = logging.getLogger(__name__)
 
-# Locate itch_films/local_settings.py from this file's position:
+# Находим itch_films/local_settings.py от расположения этого файла:
 #   __file__ → .../services/ai_images/poster_repository.py
 #   dirname × 3 → Project_IT_Career_Hub_2/
 _project_root = os.path.dirname(
@@ -16,7 +16,7 @@ _itch_films = os.path.join(_project_root, 'itch_films')
 if _itch_films not in sys.path:
     sys.path.insert(0, _itch_films)
 
-import local_settings  # noqa: E402 — must come after sys.path setup
+import local_settings  # noqa: E402 — должно идти после настройки sys.path
 
 CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS movie_posters (
@@ -41,20 +41,20 @@ def _get_write_conn():
 # ── DDL ───────────────────────────────────────────────────────────────
 
 def create_movie_posters_table() -> None:
-    """Create movie_posters in the write database if it does not exist."""
+    """Создаёт movie_posters в write-базе данных, если она не существует."""
     conn = _get_write_conn()
     cursor = conn.cursor()
     cursor.execute(CREATE_TABLE_SQL)
     conn.commit()
     cursor.close()
     conn.close()
-    logger.info("movie_posters table ready.")
+    logger.info("Таблица movie_posters готова.")
 
 
-# ── Read ──────────────────────────────────────────────────────────────
+# ── Чтение ──────────────────────────────────────────────────────────────
 
 def get_poster_by_film_id(film_id: int) -> dict | None:
-    """Return the poster record for film_id, or None if not found."""
+    """Возвращает запись постера для film_id, либо None, если не найдена."""
     conn = _get_write_conn()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM movie_posters WHERE film_id = %s", (film_id,))
@@ -65,7 +65,7 @@ def get_poster_by_film_id(film_id: int) -> dict | None:
 
 
 def poster_record_exists(film_id: int) -> bool:
-    """Return True if a poster record already exists for film_id."""
+    """Возвращает True, если запись постера для film_id уже существует."""
     conn = _get_write_conn()
     cursor = conn.cursor()
     cursor.execute(
@@ -79,9 +79,9 @@ def poster_record_exists(film_id: int) -> bool:
 
 def get_poster_urls_by_ids(film_ids: list) -> dict:
     """
-    Return {film_id: image_url} for the given list of film IDs.
-    Used by the Flask app to enrich search results with poster URLs.
-    Returns an empty dict on any error so the site keeps working.
+    Возвращает {film_id: image_url} для заданного списка ID фильмов.
+    Используется Flask-приложением для обогащения результатов поиска URL постеров.
+    При любой ошибке возвращает пустой словарь, чтобы сайт продолжал работать.
     """
     if not film_ids:
         return {}
@@ -98,11 +98,11 @@ def get_poster_urls_by_ids(film_ids: list) -> dict:
         conn.close()
         return result
     except Exception as e:
-        logger.warning(f"Could not fetch poster URLs: {e}")
+        logger.warning(f"Не удалось получить URL постеров: {e}")
         return {}
 
 
-# ── Write ─────────────────────────────────────────────────────────────
+# ── Запись ─────────────────────────────────────────────────────────────
 
 def save_poster_record(
     film_id: int,
@@ -114,7 +114,7 @@ def save_poster_record(
     image_url: str,
     status: str = 'generated',
 ) -> None:
-    """Insert a new poster record into movie_posters."""
+    """Вставляет новую запись постера в movie_posters."""
     conn = _get_write_conn()
     cursor = conn.cursor()
     cursor.execute(
@@ -128,4 +128,4 @@ def save_poster_record(
     conn.commit()
     cursor.close()
     conn.close()
-    logger.info(f"Saved poster record for film_id={film_id}")
+    logger.info(f"Сохранена запись постера для film_id={film_id}")

@@ -1,43 +1,43 @@
 """
 scripts/generate_movie_posters.py
 ──────────────────────────────────────────────────────────────────────
-Batch poster generator for ITCH Films using OpenAI gpt-image-2.
+Пакетный генератор постеров для ITCH Films на основе OpenAI gpt-image-2.
 
-Usage (run from project root):
-    python scripts/generate_movie_posters.py [options]
+Использование (запуск из корня проекта):
+    python scripts/generate_movie_posters.py [опции]
 
-Options:
-    --limit N       Max posters to generate in this run (default: 5).
-    --film-id ID    Generate a poster for one specific film only.
-    --dry-run       Show what would be generated; no API calls, no DB writes.
+Опции:
+    --limit N       Максимум постеров за этот запуск (по умолчанию: 5).
+    --film-id ID    Сгенерировать постер только для одного конкретного фильма.
+    --dry-run       Показать, что было бы сгенерировано; без вызовов API, без записи в БД.
 
-Examples:
-    # See the next 5 films that would be generated (safe preview)
+Примеры:
+    # Посмотреть следующие 5 фильмов, которые будут сгенерированы (безопасный предпросмотр)
     python scripts/generate_movie_posters.py --dry-run
 
-    # Generate one poster for film_id=1
+    # Сгенерировать один постер для film_id=1
     python scripts/generate_movie_posters.py --film-id 1
 
-    # Generate up to 5 posters (default)
+    # Сгенерировать до 5 постеров (по умолчанию)
     python scripts/generate_movie_posters.py
 
-    # Continue the queue, up to 20 posters
+    # Продолжить очередь, до 20 постеров
     python scripts/generate_movie_posters.py --limit 20
 
-Safety rules:
-    - Never prints the OpenAI API key.
-    - Skips films that already have a completed poster from OpenAI.
-    - Mock posters (provider='mock') are NOT counted as final — those films
-      will be regenerated with OpenAI when their queue item is pending.
-    - Does NOT auto-retry failed items in the same run.
-    - Does NOT start mass generation automatically.
+Правила безопасности:
+    - Никогда не печатает API-ключ OpenAI.
+    - Пропускает фильмы, у которых уже есть завершённый постер от OpenAI.
+    - Mock-постеры (provider='mock') НЕ считаются финальными — эти фильмы
+      будут перегенерированы через OpenAI, когда их элемент очереди станет pending.
+    - НЕ ретраит автоматически неудачные элементы в рамках того же запуска.
+    - НЕ запускает массовую генерацию автоматически.
 
-New flags (budget-safe mass generation):
-    --target-from-db              Auto-calculate remaining from Sakila vs movie_posters.
-    --max-api-attempts N          Hard cap on actual OpenAI API calls (overrides limit).
-    --estimated-budget X.XX       Abort before starting if estimated cost > X.XX USD.
-    --cost-per-image X.XXX        Output image cost per call (default: 0.005 USD —
-                                  official price for gpt-image-2 quality=low 1024x1536).
+Новые флаги (бюджетно-безопасная массовая генерация):
+    --target-from-db              Автоматически вычислить остаток: Sakila минус movie_posters.
+    --max-api-attempts N          Жёсткий предел реальных вызовов OpenAI API (переопределяет limit).
+    --estimated-budget X.XX       Прервать до начала, если оценочная стоимость > X.XX USD.
+    --cost-per-image X.XXX        Стоимость одного изображения за вызов (по умолчанию: 0.005 USD —
+                                  официальная цена gpt-image-2 quality=low 1024x1536).
 """
 
 
@@ -47,11 +47,11 @@ import time
 import argparse
 import logging
 
-# Force UTF-8 output on Windows (default console is cp1252)
+# Принудительно UTF-8 на Windows (консоль по умолчанию — cp1252)
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
-# ── Path setup ────────────────────────────────────────────────────────
+# ── Настройка путей ────────────────────────────────────────────────────────
 _script_dir   = os.path.dirname(os.path.abspath(__file__))
 _project_root = os.path.dirname(_script_dir)
 _itch_films   = os.path.join(_project_root, 'itch_films')
@@ -64,7 +64,7 @@ if _itch_films not in sys.path:
 from dotenv import load_dotenv
 load_dotenv(os.path.join(_project_root, '.env'))
 
-# ── Imports ───────────────────────────────────────────────────────────
+# ── Импорты ───────────────────────────────────────────────────────────
 import mysql.connector
 import local_settings
 
@@ -78,22 +78,22 @@ from services.ai_posters import (
 from services.ai_posters.providers.openai_provider import OpenAIProvider, DEFAULT_MODEL
 from services.ai_posters.exceptions import ProviderConfigurationError
 
-# ── Logging ───────────────────────────────────────────────────────────
+# ── Логирование ───────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.WARNING,
     format='%(levelname)s %(name)s: %(message)s',
 )
 logger = logging.getLogger(__name__)
 
-# ── Constants ─────────────────────────────────────────────────────────
+# ── Константы ─────────────────────────────────────────────────────────
 STORAGE_DIR           = os.path.join(_project_root, 'storage', 'posters')
 BATCH_SIZE            = 50
 LINE                  = '=' * 52
-DEFAULT_COST_PER_IMG  = 0.005   # USD — official price: gpt-image-2, quality=low, 1024x1536
-BUDGET_HARD_LIMIT     = 7.50    # USD — never spend more than this in one run
+DEFAULT_COST_PER_IMG  = 0.005   # USD — официальная цена: gpt-image-2, quality=low, 1024x1536
+BUDGET_HARD_LIMIT     = 7.50    # USD — никогда не тратить больше за один запуск
 
 
-# ── Argument parsing ──────────────────────────────────────────────────
+# ── Разбор аргументов ──────────────────────────────────────────────────
 
 def _positive_int(value: str) -> int:
     try:
@@ -108,16 +108,16 @@ def _positive_int(value: str) -> int:
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse CLI arguments. Returns a Namespace with limit, film_id, dry_run."""
+    """Разбирает аргументы CLI. Возвращает Namespace с limit, film_id, dry_run."""
     parser = argparse.ArgumentParser(
-        description='ITCH Films — AI Poster Generator (OpenAI gpt-image-2)',
+        description='ITCH Films — генератор AI-постеров (OpenAI gpt-image-2)',
     )
     parser.add_argument(
         '--limit',
         type=_positive_int,
         default=5,
         metavar='N',
-        help='Maximum number of posters to generate in this run (default: 5, must be > 0).',
+        help='Максимум постеров за этот запуск (по умолчанию: 5, должно быть > 0).',
     )
     parser.add_argument(
         '--film-id',
@@ -125,21 +125,21 @@ def parse_args() -> argparse.Namespace:
         default=None,
         dest='film_id',
         metavar='ID',
-        help='Generate a poster for this specific film_id only (must be > 0).',
+        help='Сгенерировать постер только для этого film_id (должно быть > 0).',
     )
     parser.add_argument(
         '--dry-run',
         action='store_true',
         dest='dry_run',
-        help='Show what would be generated without calling the OpenAI API.',
+        help='Показать, что было бы сгенерировано, без вызова OpenAI API.',
     )
     parser.add_argument(
         '--sync-queue',
         action='store_true',
         dest='sync_queue',
         help=(
-            'Synchronise movie_generation_queue with completed OpenAI posters, '
-            'then exit. No API calls. No file writes. No movie_posters changes.'
+            'Синхронизировать movie_generation_queue с завершёнными постерами OpenAI, '
+            'затем выйти. Без вызовов API. Без записи файлов. Без изменений movie_posters.'
         ),
     )
     parser.add_argument(
@@ -147,9 +147,9 @@ def parse_args() -> argparse.Namespace:
         action='store_true',
         dest='retry_failed',
         help=(
-            'Reset failed queue items to pending, then exit. '
-            'Combine with --film-id to retry a single film. '
-            'No API calls. No file writes. No movie_posters changes.'
+            'Сбросить неудачные элементы очереди в pending, затем выйти. '
+            'Комбинируйте с --film-id для повтора одного фильма. '
+            'Без вызовов API. Без записи файлов. Без изменений movie_posters.'
         ),
     )
     parser.add_argument(
@@ -157,8 +157,8 @@ def parse_args() -> argparse.Namespace:
         action='store_true',
         dest='target_from_db',
         help=(
-            'Dynamically calculate remaining films from Sakila vs completed OpenAI posters. '
-            'Overrides --limit. Stops when every Sakila film has a valid OpenAI poster.'
+            'Динамически вычислить оставшиеся фильмы: Sakila минус завершённые постеры OpenAI. '
+            'Переопределяет --limit. Останавливается, когда у каждого фильма Sakila есть валидный постер OpenAI.'
         ),
     )
     parser.add_argument(
@@ -168,8 +168,8 @@ def parse_args() -> argparse.Namespace:
         dest='max_api_attempts',
         metavar='N',
         help=(
-            'Hard cap on actual OpenAI API calls in this run. '
-            'Overrides --limit and --target-from-db limit. Safety circuit-breaker.'
+            'Жёсткий предел реальных вызовов OpenAI API за этот запуск. '
+            'Переопределяет --limit и лимит --target-from-db. Защитный предохранитель.'
         ),
     )
     parser.add_argument(
@@ -179,8 +179,8 @@ def parse_args() -> argparse.Namespace:
         dest='estimated_budget',
         metavar='USD',
         help=(
-            'Abort before generation if estimated cost exceeds this amount (USD). '
-            'Example: --estimated-budget 8.00'
+            'Прервать до начала генерации, если оценочная стоимость превышает эту сумму (USD). '
+            'Пример: --estimated-budget 8.00'
         ),
     )
     parser.add_argument(
@@ -190,16 +190,16 @@ def parse_args() -> argparse.Namespace:
         dest='cost_per_image',
         metavar='USD',
         help=(
-            f'Output image cost per API call in USD '
-            f'(default: {DEFAULT_COST_PER_IMG} — official price for '
+            f'Стоимость одного изображения за вызов API в USD '
+            f'(по умолчанию: {DEFAULT_COST_PER_IMG} — официальная цена для '
             f'gpt-image-2 quality=low 1024x1536). '
-            f'Does not include input token cost.'
+            f'Не включает стоимость входных токенов.'
         ),
     )
     return parser.parse_args()
 
 
-# ── Database helpers ──────────────────────────────────────────────────
+# ── Вспомогательные функции для БД ──────────────────────────────────────────────────
 
 def _fetch_films() -> list[dict]:
 
@@ -224,11 +224,11 @@ def _fetch_films() -> list[dict]:
 
 def _fetch_film_by_id(film_id: int) -> dict | None:
     """
-    Fetch a single film from Sakila by film_id.
+    Получает один фильм из Sakila по film_id.
 
-    Returns a dict with film_id, title, description, genre, release_year,
-    rating — or None if the film does not exist.
-    Prompt is always built from title + genre + description, never from ID alone.
+    Возвращает словарь с film_id, title, description, genre, release_year,
+    rating — либо None, если фильм не существует.
+    Промпт всегда строится из title + genre + description, никогда только из ID.
     """
     conn   = mysql.connector.connect(**local_settings.dbconfig)
     cursor = conn.cursor(dictionary=True)
@@ -253,8 +253,8 @@ def _fetch_film_by_id(film_id: int) -> dict | None:
 
 def _reset_stuck_processing(queue: GenerationQueue) -> int:
     """
-    Reset queue items stuck in 'processing' back to 'pending'.
-    These are leftovers from a run that was interrupted mid-generation.
+    Сбрасывает элементы очереди, застрявшие в 'processing', обратно в 'pending'.
+    Это остатки от запуска, прерванного посреди генерации.
     """
     conn   = mysql.connector.connect(**local_settings.dbconfig_write)
     cursor = conn.cursor()
@@ -269,17 +269,17 @@ def _reset_stuck_processing(queue: GenerationQueue) -> int:
     return count
 
 
-# ── Prompt helpers ────────────────────────────────────────────────────
+# ── Вспомогательные функции для промпта ────────────────────────────────────────────────
 
 def _build_description(film: dict) -> tuple[str, bool]:
     """
-    Return (effective_description, is_fallback).
+    Возвращает (effective_description, is_fallback).
 
-    If description is empty or None, falls back to a sentence built from
-    title + genre (never invents content). is_fallback=True signals the
-    caller to log a warning before generating.
+    Если description пустое или None, откатывается на предложение, построенное
+    из title + genre (никогда не выдумывает контент). is_fallback=True сигнализирует
+    вызывающему коду вывести предупреждение перед генерацией.
 
-    The prompt is never built from film_id alone.
+    Промпт никогда не строится только из film_id.
     """
     desc = (film.get('description') or '').strip()
     if desc:
@@ -289,7 +289,7 @@ def _build_description(film: dict) -> tuple[str, bool]:
     return fallback, True
 
 
-# ── Output helpers ────────────────────────────────────────────────────
+# ── Вспомогательные функции для вывода ────────────────────────────────────────────────
 
 def _print_film_preview(
     film: dict,
@@ -297,15 +297,15 @@ def _print_film_preview(
     negative_prompt: str,
     is_fallback: bool = False,
 ) -> None:
-    """Print a safe preview of what will be sent to OpenAI. Never prints the key."""
+    """Печатает безопасный предпросмотр того, что будет отправлено в OpenAI. Никогда не печатает ключ."""
     raw_desc = film.get('description') or ''
     if is_fallback:
-        desc_line = '[FALLBACK — description is empty in DB, using title + genre]'
+        desc_line = '[FALLBACK — description пусто в БД, используем title + genre]'
     else:
         desc_line = raw_desc[:150] + ('...' if len(raw_desc) > 150 else '')
 
     print()
-    print("  ── Film preview ──────────────────────────────────")
+    print("  ── Предпросмотр фильма ──────────────────────────────────")
     print(f"  film_id      : {film['film_id']}")
     print(f"  title        : {film['title']}")
     print(f"  genre        : {film.get('genre') or 'N/A'}")
@@ -313,57 +313,57 @@ def _print_film_preview(
     print(f"  rating       : {film.get('rating') or 'N/A'}")
     print(f"  description  : {desc_line}")
     print(f"  style        : auto")
-    print(f"  prompt len   : {len(prompt)} chars")
+    print(f"  длина промпта : {len(prompt)} симв.")
 
 
 def _print_banner(args: argparse.Namespace, model: str) -> None:
-    mode = 'DRY-RUN (no API calls)' if args.dry_run else 'LIVE'
+    mode = 'DRY-RUN (без вызовов API)' if args.dry_run else 'БОЕВОЙ'
     print(LINE)
-    print("  ITCH Films — AI Poster Generator")
-    print(f"  Provider : OpenAI  ({model})")
-    print(f"  Storage  : {STORAGE_DIR}")
-    print(f"  Mode     : {mode}")
+    print("  ITCH Films — генератор AI-постеров")
+    print(f"  Провайдер : OpenAI  ({model})")
+    print(f"  Хранилище : {STORAGE_DIR}")
+    print(f"  Режим     : {mode}")
     if args.film_id is not None:
-        print(f"  Film ID  : {args.film_id}")
+        print(f"  Film ID   : {args.film_id}")
     else:
-        print(f"  Limit    : {args.limit} posters per run")
+        print(f"  Лимит     : {args.limit} постеров за запуск")
     print(LINE)
 
 
 def _print_summary(generated: int, skipped: int, failed: int, total: int) -> None:
     print()
     print(LINE)
-    print(f"  Generated : {generated}")
-    print(f"  Skipped   : {skipped}  (OpenAI poster already exists)")
-    print(f"  Failed    : {failed}")
-    print(f"  Total     : {total}")
+    print(f"  Сгенерировано : {generated}")
+    print(f"  Пропущено     : {skipped}  (постер OpenAI уже существует)")
+    print(f"  Неудачно      : {failed}")
+    print(f"  Всего         : {total}")
     print(LINE)
 
 
-# ── Single-film mode ──────────────────────────────────────────────────
+# ── Режим одного фильма ──────────────────────────────────────────────────
 
 def _run_single_film(
     args: argparse.Namespace,
-    service,           # PosterService | None  (None when dry_run=True)
+    service,           # PosterService | None  (None, когда dry_run=True)
     repository: PosterRepository,
 ) -> None:
     """
-    Generate a poster for exactly one film, identified by --film-id.
+    Генерирует постер ровно для одного фильма, заданного через --film-id.
 
-    Loads title, genre, description, release_year, rating from Sakila.
-    Exits with code 1 if the film is not found.
-    Falls back to title+genre if description is empty — does NOT invent content.
+    Загружает title, genre, description, release_year, rating из Sakila.
+    Завершается с кодом 1, если фильм не найден.
+    Откатывается на title+genre, если description пустое — НЕ выдумывает контент.
     """
     film = _fetch_film_by_id(args.film_id)
     if film is None:
-        print(f"\n[ERROR] Film ID {args.film_id} was not found in Sakila.")
+        print(f"\n[ОШИБКА] Film ID {args.film_id} не найден в Sakila.")
         sys.exit(1)
 
     desc, is_fallback = _build_description(film)
     if is_fallback:
         print(
-            f"\n  [FALLBACK] Film {args.film_id} has no description in DB. "
-            f"Using title + genre instead."
+            f"\n  [FALLBACK] У фильма {args.film_id} нет description в БД. "
+            f"Используем title + genre."
         )
 
     prompt, negative_prompt = build_prompt(
@@ -376,15 +376,15 @@ def _run_single_film(
     _print_film_preview(film, prompt, negative_prompt, is_fallback)
 
     if args.dry_run:
-        print(f"\n  [DRY-RUN] No API call made. Prompt is {len(prompt)} chars.")
+        print(f"\n  [DRY-RUN] Вызов API не выполнен. Длина промпта: {len(prompt)} символов.")
         return
 
     if repository.openai_poster_exists(film['film_id']):
-        print(f"\n  [SKIP] Film {args.film_id} already has a completed OpenAI poster.")
+        print(f"\n  [SKIP] У фильма {args.film_id} уже есть завершённый постер OpenAI.")
         return
 
-    print(f"\n  Generating poster for: {film['title']}")
-    print("  (this may take 20-30 seconds)")
+    print(f"\n  Генерируем постер для: {film['title']}")
+    print("  (это может занять 20-30 секунд)")
     try:
         poster_id = service.generate(
             film_id=film['film_id'],
@@ -395,115 +395,115 @@ def _run_single_film(
         url = service.get_poster_url(film['film_id'])
         print(f"\n  [OK] poster_id={poster_id}  url={url}")
     except Exception as exc:
-        print(f"\n  [ERROR] {exc}")
+        print(f"\n  [ОШИБКА] {exc}")
         sys.exit(1)
 
 
-# ── Retry failed items ────────────────────────────────────────────────
+# ── Повтор неудачных элементов ────────────────────────────────────────────
 
 def _run_retry_failed(args: argparse.Namespace, queue: GenerationQueue) -> None:
     """
-    Explicitly reset failed queue items back to 'pending'.
+    Явно сбрасывает неудачные элементы очереди обратно в 'pending'.
 
-    With --film-id N : resets only that film.
-    Without --film-id : shows the count of failed items, then resets all.
+    С --film-id N : сбрасывает только этот фильм.
+    Без --film-id : показывает количество неудачных элементов, затем сбрасывает все.
 
-    Does NOT call OpenAI. Does NOT create files. Does NOT write to movie_posters.
+    НЕ вызывает OpenAI. НЕ создаёт файлы. НЕ пишет в movie_posters.
     """
     print(LINE)
-    print("  ITCH Films — Retry Failed Queue Items")
+    print("  ITCH Films — повтор неудачных элементов очереди")
     print(LINE)
 
     if args.film_id is not None:
         count = queue.retry_failed(film_id=args.film_id)
         if count:
-            print(f"\n  [OK] film_id={args.film_id} reset: 'failed' → 'pending'.")
+            print(f"\n  [OK] film_id={args.film_id} сброшен: 'failed' → 'pending'.")
         else:
             print(
-                f"\n  [SKIP] film_id={args.film_id} was not in 'failed' status "
-                f"(already pending / done / processing)."
+                f"\n  [SKIP] film_id={args.film_id} не был в статусе 'failed' "
+                f"(уже pending / done / processing)."
             )
     else:
         total_failed = queue.count_by_status('failed')
-        print(f"\n  Failed items in queue: {total_failed}")
+        print(f"\n  Неудачных элементов в очереди: {total_failed}")
         if total_failed == 0:
-            print("  Nothing to reset.")
+            print("  Сбрасывать нечего.")
         else:
             count = queue.retry_failed()
-            print(f"  [OK] Reset {count} item(s): 'failed' → 'pending'.")
+            print(f"  [OK] Сброшено {count} элемент(ов): 'failed' → 'pending'.")
 
     print()
     print(LINE)
-    print("  No OpenAI API calls made.")
-    print("  No files created.")
-    print("  movie_posters table was NOT modified.")
+    print("  Вызовов OpenAI API не было.")
+    print("  Файлы не создавались.")
+    print("  Таблица movie_posters НЕ изменялась.")
 
 
-# ── Queue synchronisation ─────────────────────────────────────────────
+# ── Синхронизация очереди ─────────────────────────────────────────────
 
 def _run_sync_queue(
     repository: PosterRepository,
     queue: GenerationQueue,
 ) -> None:
     """
-    Synchronise movie_generation_queue with completed OpenAI poster status.
+    Синхронизирует movie_generation_queue со статусом завершённых постеров OpenAI.
 
-    Source of truth: movie_posters WHERE provider='openai' AND status='completed'.
-    Films with completed OpenAI poster  → queue status 'done'.
-    All other films                     → queue status 'pending'.
-    Films not in queue                  → INSERT as 'pending'.
+    Источник истины: movie_posters WHERE provider='openai' AND status='completed'.
+    Фильмы с завершённым постером OpenAI → статус очереди 'done'.
+    Все остальные фильмы                 → статус очереди 'pending'.
+    Фильмы, отсутствующие в очереди      → INSERT как 'pending'.
 
-    Does NOT call OpenAI API. Does NOT write to movie_posters. Does NOT create files.
+    НЕ вызывает OpenAI API. НЕ пишет в movie_posters. НЕ создаёт файлы.
     """
     print(LINE)
-    print("  ITCH Films — Queue Sync (OpenAI source of truth)")
+    print("  ITCH Films — синхронизация очереди (источник истины: OpenAI)")
     print(LINE)
 
-    print("\n[1/3] Fetching films from Sakila (read-only)...")
+    print("\n[1/3] Получаем фильмы из Sakila (только чтение)...")
     films = _fetch_films()
     all_film_ids = [f['film_id'] for f in films]
-    print(f"      Found {len(all_film_ids)} films.")
+    print(f"      Найдено {len(all_film_ids)} фильмов.")
 
-    print("\n[2/3] Fetching completed OpenAI poster IDs (read-only)...")
+    print("\n[2/3] Получаем ID завершённых постеров OpenAI (только чтение)...")
     openai_done_ids = repository.get_openai_completed_film_ids()
-    print(f"      Completed OpenAI posters : {len(openai_done_ids)}")
-    print(f"      Films needing generation : {len(all_film_ids) - len(openai_done_ids)}")
+    print(f"      Завершённых постеров OpenAI      : {len(openai_done_ids)}")
+    print(f"      Фильмов, требующих генерации      : {len(all_film_ids) - len(openai_done_ids)}")
 
-    print("\n[3/3] Synchronising queue...")
+    print("\n[3/3] Синхронизируем очередь...")
     result = queue.sync_for_openai_generation(all_film_ids, openai_done_ids)
 
     print()
     print(LINE)
-    print("  Sync complete:")
-    print(f"  Inserted (new entries) : {result['inserted']}")
-    print(f"  Set to pending         : {result['set_to_pending']}")
-    print(f"  Set to done            : {result['set_to_done']}")
-    print(f"  Unchanged              : {result['unchanged']}")
+    print("  Синхронизация завершена:")
+    print(f"  Добавлено (новых записей) : {result['inserted']}")
+    print(f"  Переведено в pending      : {result['set_to_pending']}")
+    print(f"  Переведено в done         : {result['set_to_done']}")
+    print(f"  Без изменений             : {result['unchanged']}")
     print(LINE)
     print()
-    print("  No OpenAI API calls made.")
-    print("  No files created.")
-    print("  movie_posters table was NOT modified.")
+    print("  Вызовов OpenAI API не было.")
+    print("  Файлы не создавались.")
+    print("  Таблица movie_posters НЕ изменялась.")
 
 
-# ── Batch dry-run (read-only) ─────────────────────────────────────────
+# ── Batch dry-run (только чтение) ─────────────────────────────────────────
 
 def _run_batch_dry(args: argparse.Namespace, repository: PosterRepository) -> None:
     """
-    Read-only dry-run preview for batch mode.
+    Read-only предпросмотр dry-run для пакетного режима.
 
-    Performs only SELECT queries — never creates tables, writes to the queue,
-    calls the OpenAI API, or creates files. The generation queue is not
-    consulted at all; candidate films come directly from Sakila.
+    Выполняет только SELECT-запросы — никогда не создаёт таблицы, не пишет в
+    очередь, не вызывает OpenAI API и не создаёт файлы. Очередь генерации
+    вообще не используется; кандидаты-фильмы берутся напрямую из Sakila.
     """
-    print("\n[DRY-RUN] Fetching films from Sakila (read-only)...")
+    print("\n[DRY-RUN] Получаем фильмы из Sakila (только чтение)...")
     films = _fetch_films()
-    print(f"          Found {len(films)} films in Sakila.")
+    print(f"          Найдено {len(films)} фильмов в Sakila.")
 
     openai_done_ids = repository.get_openai_completed_film_ids()
     candidates = [f for f in films if f['film_id'] not in openai_done_ids]
 
-    # Resolve effective limit for dry-run
+    # Вычисляем действующий лимит для dry-run
     if getattr(args, 'target_from_db', False):
         dry_limit = len(candidates)
     else:
@@ -511,12 +511,12 @@ def _run_batch_dry(args: argparse.Namespace, repository: PosterRepository) -> No
     if getattr(args, 'max_api_attempts', None) is not None:
         dry_limit = min(dry_limit, args.max_api_attempts)
 
-    selected = candidates[:min(dry_limit, 10)]   # show at most 10 in dry-run
+    selected = candidates[:min(dry_limit, 10)]   # показываем не более 10 в dry-run
 
-    print(f"          Films with completed OpenAI poster : {len(openai_done_ids)}")
-    print(f"          Films without OpenAI poster        : {len(candidates)}")
-    print(f"          Would generate up to               : {dry_limit}")
-    print(f"          Showing preview for                : {len(selected)}")
+    print(f"          Фильмов с завершённым постером OpenAI : {len(openai_done_ids)}")
+    print(f"          Фильмов без постера OpenAI            : {len(candidates)}")
+    print(f"          Было бы сгенерировано до              : {dry_limit}")
+    print(f"          Показываем предпросмотр для           : {len(selected)}")
 
     for film in selected:
         desc, is_fallback = _build_description(film)
@@ -529,50 +529,50 @@ def _run_batch_dry(args: argparse.Namespace, repository: PosterRepository) -> No
         _print_film_preview(film, prompt, negative_prompt, is_fallback)
 
     print()
-    print("  [DRY-RUN] No tables created. No queue modified.")
-    print("  [DRY-RUN] No OpenAI API calls. No files written.")
+    print("  [DRY-RUN] Таблицы не создавались. Очередь не менялась.")
+    print("  [DRY-RUN] Вызовов OpenAI API не было. Файлы не записывались.")
 
 
-# ── Batch mode (live) ─────────────────────────────────────────────────
+# ── Batch-режим (боевой) ─────────────────────────────────────────────────
 
 def _run_batch(
     args: argparse.Namespace,
-    service,           # PosterService | None  (None when dry_run=True)
+    service,           # PosterService | None  (None, когда dry_run=True)
     repository: PosterRepository,
     queue: GenerationQueue,
 ) -> None:
     """
-    Process the generation queue up to --limit actual generations.
+    Обрабатывает очередь генерации до --limit реальных генераций.
 
-    In dry-run mode delegates immediately to _run_batch_dry() which is
-    fully read-only. All queue and table operations are skipped.
+    В режиме dry-run сразу делегирует в _run_batch_dry(), который полностью
+    read-only. Все операции с очередью и таблицами пропускаются.
 
-    Skip logic (live mode): a film is skipped only if it has a completed
-    poster with provider='openai'. Skips do NOT count toward --limit.
-    Mock posters (provider='mock') do NOT prevent regeneration.
+    Логика пропуска (боевой режим): фильм пропускается, только если у него
+    есть завершённый постер с provider='openai'. Пропуски НЕ считаются в --limit.
+    Mock-постеры (provider='mock') НЕ препятствуют регенерации.
     """
     if args.dry_run:
         _run_batch_dry(args, repository)
         return
 
-    # ── Step 1: tables ────────────────────────────────────────────────
-    print("\n[1/4] Creating tables...")
+    # ── Шаг 1: таблицы ────────────────────────────────────────────────
+    print("\n[1/4] Создаём таблицы...")
     repository.create_table()
     queue.create_table()
-    print("      Done.")
+    print("      Готово.")
 
 
-    # ── Step 2: fetch films ───────────────────────────────────────────
-    print("\n[2/4] Fetching films from Sakila...")
+    # ── Шаг 2: получаем фильмы ───────────────────────────────────────────
+    print("\n[2/4] Получаем фильмы из Sakila...")
     films = _fetch_films()
     all_film_ids = [f['film_id'] for f in films]
     film_lookup: dict[int, dict] = {f['film_id']: f for f in films}
-    print(f"      Found {len(films)} films.")
+    print(f"      Найдено {len(films)} фильмов.")
 
-    # ── Step 3: sync queue (source of truth: completed OpenAI posters) ─
-    # Replaces bulk_enqueue + reset_stuck_processing.
-    # Films with OpenAI poster → done; all others → pending (even if done-from-mock).
-    print("\n[3/4] Synchronising queue with OpenAI poster status...")
+    # ── Шаг 3: синхронизация очереди (источник истины: завершённые постеры OpenAI) ─
+    # Заменяет bulk_enqueue + reset_stuck_processing.
+    # Фильмы с постером OpenAI → done; все остальные → pending (даже если done через mock).
+    print("\n[3/4] Синхронизируем очередь со статусом постеров OpenAI...")
     openai_done_ids = repository.get_openai_completed_film_ids()
     sync_result     = queue.sync_for_openai_generation(all_film_ids, openai_done_ids)
     print(f"      Inserted        : {sync_result['inserted']}")
@@ -580,27 +580,27 @@ def _run_batch(
     print(f"      Set to done     : {sync_result['set_to_done']}")
     print(f"      Unchanged       : {sync_result['unchanged']}")
 
-    # ── Resolve effective limit (--target-from-db / --max-api-attempts) ──
+    # ── Вычисляем действующий лимит (--target-from-db / --max-api-attempts) ──
     remaining_films = len(all_film_ids) - len(openai_done_ids)
 
     if getattr(args, 'target_from_db', False):
         effective_limit = remaining_films
-        print(f"\n      [target-from-db] Remaining films: {remaining_films}")
+        print(f"\n      [target-from-db] Осталось фильмов: {remaining_films}")
     else:
         effective_limit = args.limit
 
     if getattr(args, 'max_api_attempts', None) is not None:
         effective_limit = min(effective_limit, args.max_api_attempts)
-        print(f"      [max-api-attempts] Hard cap applied: {args.max_api_attempts}")
+        print(f"      [max-api-attempts] Применён жёсткий предел: {args.max_api_attempts}")
 
-    # ── Budget pre-check ──────────────────────────────────────────────
+    # ── Предварительная проверка бюджета ──────────────────────────────────────────────
     cost_per_img   = getattr(args, 'cost_per_image', DEFAULT_COST_PER_IMG)
     budget_limit   = getattr(args, 'estimated_budget', None)
     retry_reserve  = min(int(effective_limit * 0.10), 100)
     max_attempts   = effective_limit + retry_reserve
     estimated_cost = max_attempts * cost_per_img
 
-    print(f"\n      Budget estimate:")
+    print(f"\n      Оценка бюджета:")
     print(f"        cost_per_image     = ${cost_per_img:.4f}")
     print(f"        effective_limit    = {effective_limit}")
     print(f"        retry_reserve      = {retry_reserve}")
@@ -610,29 +610,29 @@ def _run_batch(
         print(f"        budget_limit       = ${budget_limit:.2f}")
         if estimated_cost > budget_limit:
             print(
-                f"\n[BUDGET ABORT] Estimated cost ${estimated_cost:.2f} "
-                f"exceeds budget ${budget_limit:.2f}.\n"
-                f"  Use --max-api-attempts to cap at a safe number.\n"
-                f"  Safe cap: --max-api-attempts {int(budget_limit / cost_per_img)}"
+                f"\n[ПРЕРВАНО ПО БЮДЖЕТУ] Оценочная стоимость ${estimated_cost:.2f} "
+                f"превышает бюджет ${budget_limit:.2f}.\n"
+                f"  Используйте --max-api-attempts, чтобы задать безопасный предел.\n"
+                f"  Безопасный предел: --max-api-attempts {int(budget_limit / cost_per_img)}"
             )
             sys.exit(1)
     elif estimated_cost > BUDGET_HARD_LIMIT:
         print(
-            f"\n[BUDGET WARNING] Estimated ${estimated_cost:.2f} "
-            f"exceeds hard limit ${BUDGET_HARD_LIMIT:.2f}.\n"
-            f"  Use --estimated-budget to explicitly allow, "
-            f"or --max-api-attempts to cap.\n"
-            f"  Safe cap: --max-api-attempts {int(BUDGET_HARD_LIMIT / cost_per_img)}"
+            f"\n[ПРЕДУПРЕЖДЕНИЕ О БЮДЖЕТЕ] Оценка ${estimated_cost:.2f} "
+            f"превышает жёсткий лимит ${BUDGET_HARD_LIMIT:.2f}.\n"
+            f"  Используйте --estimated-budget, чтобы явно разрешить, "
+            f"или --max-api-attempts, чтобы ограничить.\n"
+            f"  Безопасный предел: --max-api-attempts {int(BUDGET_HARD_LIMIT / cost_per_img)}"
         )
         sys.exit(1)
 
-    # ── Step 4: process queue — stop when api_attempts reaches hard cap ──
-    api_cap = effective_limit   # max actual OpenAI API calls
-    print(f"\n[4/4] Generating posters (api_cap={api_cap})...")
-    generated   = 0    # successful generations
-    skipped     = 0    # films that already had an OpenAI poster
-    failed      = 0    # generation failures
-    api_attempts = 0   # actual calls sent to OpenAI Images API (success + failure)
+    # ── Шаг 4: обрабатываем очередь — останавливаемся, когда api_attempts достигает предела ──
+    api_cap = effective_limit   # максимум реальных вызовов OpenAI API
+    print(f"\n[4/4] Генерируем постеры (api_cap={api_cap})...")
+    generated   = 0    # успешные генерации
+    skipped     = 0    # фильмы, у которых уже был постер OpenAI
+    failed      = 0    # неудачные генерации
+    api_attempts = 0   # реальные вызовы OpenAI Images API (успех + неудача)
 
     while api_attempts < api_cap:
         pending = queue.get_pending(limit=BATCH_SIZE)
@@ -648,23 +648,23 @@ def _run_batch(
             film     = film_lookup.get(film_id)
 
             if not film:
-                # No API call — just fail the queue item and move on
+                # Без вызова API — просто помечаем элемент очереди как неудачный и идём дальше
                 queue.mark_failed(queue_id)
                 failed += 1
-                print(f"  [MISSING ] [{film_id:>4}] film not found in Sakila")
+                print(f"  [MISSING ] [{film_id:>4}] фильм не найден в Sakila")
                 continue
 
-            # Skip if an OpenAI poster already exists — mock posters don't count
+            # Пропускаем, если постер OpenAI уже существует — mock-постеры не считаются
             if repository.openai_poster_exists(film_id):
                 queue.mark_done(queue_id)
                 skipped += 1
-                continue   # skips do NOT count as api_attempts
+                continue   # пропуски НЕ считаются в api_attempts
 
             desc, is_fallback = _build_description(film)
 
             queue.mark_processing(queue_id)
             start = time.monotonic()
-            api_attempts += 1   # increment here — counts this actual OpenAI API call
+            api_attempts += 1   # увеличиваем здесь — считаем этот реальный вызов OpenAI API
             try:
                 poster_id = service.generate(
                     film_id=film_id,
@@ -682,21 +682,21 @@ def _run_batch(
                     f"{film['title'][:40]:<40}  {url}  ({elapsed}s){note}"
                 )
 
-                # Progress report every 50 successful generations
+                # Отчёт о прогрессе каждые 50 успешных генераций
                 if generated % 50 == 0:
                     valid_now  = len(openai_done_ids) + generated
                     left_now   = len(all_film_ids) - valid_now
                     api_cost   = round(api_attempts * cost_per_img, 4)
                     print()
-                    print(f"  ── Progress ────────────────────────────────────")
-                    print(f"  Sakila films          : {len(all_film_ids)}")
-                    print(f"  Valid posters before  : {len(openai_done_ids)}")
-                    print(f"  Generated this run    : {generated}")
-                    print(f"  Current valid total   : {valid_now}")
-                    print(f"  Remaining             : {left_now}")
-                    print(f"  API attempts          : {api_attempts}")
-                    print(f"  Failed attempts       : {failed}")
-                    print(f"  Estimated cost        : ~${api_cost:.4f}")
+                    print(f"  ── Прогресс ────────────────────────────────────")
+                    print(f"  Фильмов в Sakila          : {len(all_film_ids)}")
+                    print(f"  Валидных постеров было    : {len(openai_done_ids)}")
+                    print(f"  Сгенерировано в этом запуске : {generated}")
+                    print(f"  Текущий валидный итог     : {valid_now}")
+                    print(f"  Осталось                  : {left_now}")
+                    print(f"  Попыток API               : {api_attempts}")
+                    print(f"  Неудачных попыток         : {failed}")
+                    print(f"  Оценочная стоимость       : ~${api_cost:.4f}")
                     print(f"  ────────────────────────────────────────────────")
                     print()
 
@@ -708,14 +708,14 @@ def _run_batch(
                     f"{film['title'][:40]:<40}  {exc}"
                 )
 
-    # ── Final queue stats ─────────────────────────────────────────────
-    print("\n[Final] Queue status:")
+    # ── Финальная статистика очереди ─────────────────────────────────────────────
+    print("\n[Итог] Статус очереди:")
     for status, count in sorted(queue.get_stats().items()):
         print(f"        {status:<12}: {count}")
 
     actual_cost = round(api_attempts * cost_per_img, 4)
-    print(f"\n[Final] API attempts this run : {api_attempts}")
-    print(f"[Final] Estimated output cost : ~${actual_cost:.4f}")
+    print(f"\n[Итог] Попыток API за этот запуск : {api_attempts}")
+    print(f"[Итог] Оценочная стоимость        : ~${actual_cost:.4f}")
 
     _print_summary(generated, skipped, failed, len(films))
 
@@ -725,8 +725,8 @@ def _run_batch(
 def main() -> None:
     args = parse_args()
 
-    # --sync-queue, --retry-failed, and --dry-run do not call the API.
-    # Provider is created only for live generation (batch or single-film).
+    # --sync-queue, --retry-failed и --dry-run не вызывают API.
+    # Провайдер создаётся только для боевой генерации (batch или single-film).
     provider = None
     model    = os.getenv("OPENAI_IMAGE_MODEL", DEFAULT_MODEL)
     needs_provider = not args.dry_run and not args.sync_queue and not args.retry_failed
@@ -735,8 +735,8 @@ def main() -> None:
             provider = OpenAIProvider()
             model    = provider.model_name()
         except ProviderConfigurationError as exc:
-            print(f"\n[CONFIG ERROR] {exc}")
-            print("  Add OPENAI_API_KEY to your .env file.")
+            print(f"\n[ОШИБКА КОНФИГУРАЦИИ] {exc}")
+            print("  Добавьте OPENAI_API_KEY в файл .env.")
             sys.exit(1)
 
     storage    = PosterStorage(STORAGE_DIR)
@@ -747,7 +747,7 @@ def main() -> None:
         if provider else None
     )
 
-    # Maintenance commands: exit before banner and generation
+    # Служебные команды: выход до баннера и генерации
     if args.sync_queue:
         _run_sync_queue(repository, queue)
         return

@@ -5,14 +5,14 @@ import zlib
 
 class MockImageClient:
     """
-    Development placeholder — replace with real AI image API later.
-    Accepted APIs: DALL-E (OpenAI), Stable Diffusion, Midjourney, etc.
+    Заглушка для разработки — позже заменить на настоящий API AI-изображений.
+    Подходящие API: DALL-E (OpenAI), Stable Diffusion, Midjourney и т.д.
     """
 
     def generate(self, prompt: str, output_path: str) -> str:
         """
-        Write a placeholder PNG to output_path.
-        Returns output_path on success.
+        Записывает placeholder-PNG в output_path.
+        При успехе возвращает output_path.
         """
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         _write_placeholder_png(output_path)
@@ -21,8 +21,8 @@ class MockImageClient:
 
 def _write_placeholder_png(filepath: str, width: int = 400, height: int = 600) -> None:
     """
-    Write a minimal valid PNG without external dependencies.
-    Colour: dark blue-grey (#1a1a2e) — matches the ITCH Films dark theme.
+    Записывает минимально корректный PNG без внешних зависимостей.
+    Цвет: тёмный сине-серый (#1a1a2e) — совпадает с тёмной темой ITCH Films.
     """
     def chunk(tag: bytes, data: bytes) -> bytes:
         body = tag + data
@@ -32,7 +32,7 @@ def _write_placeholder_png(filepath: str, width: int = 400, height: int = 600) -
             + struct.pack('>I', zlib.crc32(body) & 0xFFFFFFFF)
         )
 
-    # Each row: filter-byte (0 = None) + RGB pixels
+    # Каждая строка: байт-фильтр (0 = None) + пиксели RGB
     row = b'\x00' + b'\x1a\x1a\x2e' * width
     raw = row * height
 

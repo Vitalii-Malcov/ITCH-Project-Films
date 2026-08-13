@@ -1,24 +1,24 @@
 """
-PosterRepository — database abstraction for the movie_posters table.
+PosterRepository — абстракция базы данных для таблицы movie_posters.
 
-Responsibilities:
-    - Create and manage the movie_posters table in the write database.
-    - Save new poster records after successful generation.
-    - Read poster records for the Flask app (by film_id or list of ids).
+Обязанности:
+    - Создавать и обслуживать таблицу movie_posters в write-базе данных.
+    - Сохранять новые записи постеров после успешной генерации.
+    - Читать записи постеров для Flask-приложения (по film_id или списку id).
 
-What it does NOT do:
-    - Generate images or build prompts.
-    - Know about file paths beyond what it stores.
-    - Know about Flask or HTTP.
+Чего НЕ делает:
+    - Не генерирует изображения и не строит промпты.
+    - Не знает про пути к файлам сверх того, что хранит.
+    - Не знает про Flask или HTTP.
 
-Repository Pattern:
-    PosterService and Flask routes depend on PosterRepository, not on raw
-    MySQL calls. Swapping the database engine means changing only this file.
+Паттерн Repository:
+    PosterService и Flask-маршруты зависят от PosterRepository, а не от сырых
+    вызовов MySQL. Смена движка БД означает изменение только этого файла.
 
-URL derivation:
-    The table stores image_path (absolute path on disk).
-    image_url (/posters/000001.webp) is computed from os.path.basename —
-    no redundant column, no sync issues.
+Вычисление URL:
+    Таблица хранит image_path (абсолютный путь на диске).
+    image_url (/posters/000001.webp) вычисляется из os.path.basename —
+    без избыточной колонки, без проблем рассинхронизации.
 """
 
 import os
@@ -32,7 +32,7 @@ from services.ai_posters.exceptions import RepositoryError
 
 logger = logging.getLogger(__name__)
 
-# ── sys.path: locate itch_films/local_settings.py ────────────────────
+# ── sys.path: находим itch_films/local_settings.py ────────────────────
 # __file__ → .../services/ai_posters/poster_repository.py
 # dirname × 3 → Project_IT_Career_Hub_2/
 _project_root = os.path.dirname(
@@ -68,12 +68,12 @@ CREATE TABLE IF NOT EXISTS movie_posters (
 
 
 class PosterRepository:
-    """CRUD interface for the movie_posters table in the write database."""
+    """CRUD-интерфейс для таблицы movie_posters в write-базе данных."""
 
-    # ── Connection ────────────────────────────────────────────────────
+    # ── Подключение ────────────────────────────────────────────────────
 
     def _connect(self) -> MySQLConnection:
-        """Open and return a connection to the write database."""
+        """Открывает и возвращает подключение к write-базе данных."""
         try:
             return mysql.connector.connect(**local_settings.dbconfig_write)
         except mysql.connector.Error as exc:
@@ -85,13 +85,13 @@ class PosterRepository:
     # ── DDL ───────────────────────────────────────────────────────────
 
     def create_table(self) -> None:
-        """Create movie_posters table if it does not exist."""
+        """Создаёт таблицу movie_posters, если она не существует."""
         conn = self._connect()
         cursor = conn.cursor()
         try:
             cursor.execute(_CREATE_TABLE_SQL)
             conn.commit()
-            logger.info("movie_posters table is ready.")
+            logger.info("Таблица movie_posters готова.")
         except mysql.connector.Error as exc:
             raise RepositoryError(
                 "Failed to create movie_posters table.",
@@ -101,12 +101,12 @@ class PosterRepository:
             cursor.close()
             conn.close()
 
-    # ── Read ──────────────────────────────────────────────────────────
+    # ── Чтение ──────────────────────────────────────────────────────────
 
     def poster_exists(self, film_id: int) -> bool:
         """
-        Return True if at least one completed poster exists for film_id.
-        Used by PosterService before generating to skip already-done films.
+        Возвращает True, если для film_id существует хотя бы один завершённый постер.
+        Используется PosterService перед генерацией, чтобы пропускать уже готовые фильмы.
         """
         conn = self._connect()
         cursor = conn.cursor()
@@ -128,10 +128,11 @@ class PosterRepository:
 
     def get_completed_film_ids(self) -> set[int]:
         """
-        Return a set of all film_ids that have at least one completed poster.
+        Возвращает множество всех film_id, у которых есть хотя бы один
+        завершённый постер.
 
-        Used by the generation script to build the queue efficiently:
-        one query instead of 1001 individual poster_exists() calls.
+        Используется скриптом генерации для эффективного построения очереди:
+        один запрос вместо 1001 отдельного вызова poster_exists().
         """
         conn = self._connect()
         cursor = conn.cursor()
@@ -152,11 +153,12 @@ class PosterRepository:
 
     def openai_poster_exists(self, film_id: int) -> bool:
         """
-        Return True if at least one completed OpenAI poster exists for film_id.
+        Возвращает True, если для film_id существует хотя бы один завершённый
+        постер от OpenAI.
 
-        Differs from poster_exists(): only considers provider='openai'.
-        Mock posters (provider='mock') are intentionally excluded so that
-        films with mock placeholders can still be re-generated with OpenAI.
+        Отличие от poster_exists(): учитывает только provider='openai'.
+        Mock-постеры (provider='mock') намеренно исключены, чтобы фильмы
+        с mock-плейсхолдерами можно было по-прежнему перегенерировать через OpenAI.
         """
         conn = self._connect()
         cursor = conn.cursor()
@@ -179,10 +181,10 @@ class PosterRepository:
 
     def get_openai_completed_film_ids(self) -> set[int]:
         """
-        Return film_ids that have at least one completed OpenAI poster.
+        Возвращает film_id, у которых есть хотя бы один завершённый постер от OpenAI.
 
-        Used by the generation script to build the queue without re-enqueueing
-        films that already have a real OpenAI poster. Mock posters are excluded.
+        Используется скриптом генерации, чтобы не ставить в очередь повторно
+        фильмы, у которых уже есть настоящий постер от OpenAI. Mock-постеры исключены.
         """
         conn = self._connect()
         cursor = conn.cursor()
@@ -203,8 +205,8 @@ class PosterRepository:
 
     def get_latest_by_film_id(self, film_id: int) -> dict | None:
         """
-        Return the most recently generated poster for one film, or None.
-        'Latest' is determined by MAX(id) — avoids created_at ties.
+        Возвращает самый недавно сгенерированный постер для одного фильма, либо None.
+        «Актуальный» определяется через MAX(id) — избегает конфликтов по created_at.
         """
         conn = self._connect()
         cursor = conn.cursor(dictionary=True)
@@ -233,14 +235,14 @@ class PosterRepository:
 
     def get_latest_by_film_ids(self, film_ids: list[int]) -> dict[int, dict]:
         """
-        Return the latest completed poster for each film_id in the list.
+        Возвращает последний завершённый постер для каждого film_id из списка.
 
-        Uses a single JOIN query — one DB round-trip regardless of list size.
-        This is the primary method called by Flask to enrich search results.
+        Использует один JOIN-запрос — один round-trip к БД независимо от размера списка.
+        Это основной метод, который вызывает Flask для обогащения результатов поиска.
 
-        Returns:
-            {film_id: poster_record_dict}
-            Films without a poster are absent from the result.
+        Возвращает:
+            {film_id: словарь_записи_постера}
+            Фильмы без постера отсутствуют в результате.
         """
         if not film_ids:
             return {}
@@ -272,7 +274,7 @@ class PosterRepository:
             cursor.close()
             conn.close()
 
-    # ── Write ─────────────────────────────────────────────────────────
+    # ── Запись ─────────────────────────────────────────────────────────
 
     def save(
         self,
@@ -290,10 +292,11 @@ class PosterRepository:
         generation_time: float,
     ) -> int:
         """
-        Insert a new poster record and return its auto-generated id.
+        Вставляет новую запись постера и возвращает её автоматически
+        сгенерированный id.
 
-        Multiple records per film_id are allowed — each represents a version.
-        The latest version is always retrieved via MAX(id).
+        Допускается несколько записей на один film_id — каждая представляет
+        версию. Актуальная версия всегда извлекается через MAX(id).
         """
         conn = self._connect()
         cursor = conn.cursor()
@@ -316,7 +319,7 @@ class PosterRepository:
             conn.commit()
             poster_id = cursor.lastrowid
             logger.info(
-                f"Saved poster record id={poster_id} "
+                f"Сохранена запись постера id={poster_id} "
                 f"film_id={film_id} provider={provider}"
             )
             return poster_id
@@ -329,18 +332,18 @@ class PosterRepository:
             cursor.close()
             conn.close()
 
-    # ── Private helpers ───────────────────────────────────────────────
+    # ── Приватные вспомогательные методы ───────────────────────────────────────
 
     @staticmethod
     def _add_url(row: dict) -> dict:
         """
-        Compute image_url from image_path and add it to the record dict.
+        Вычисляет image_url из image_path и добавляет его в словарь записи.
 
-        Stored:  image_path = '/abs/path/storage/posters/000001.webp'
-        Derived: image_url  = '/posters/000001.webp'
+        Хранится:    image_path = '/abs/path/storage/posters/000001.webp'
+        Вычисляется: image_url  = '/posters/000001.webp'
 
-        Keeping only image_path in the DB avoids data duplication.
-        If the URL scheme changes, only this method needs updating.
+        Хранение только image_path в БД избегает дублирования данных.
+        При изменении схемы URL нужно обновить только этот метод.
         """
         filename = os.path.basename(row.get('image_path', ''))
         row['image_url'] = f"/posters/{filename}" if filename else ''

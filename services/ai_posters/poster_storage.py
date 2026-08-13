@@ -1,24 +1,24 @@
 """
-PosterStorage — file system abstraction for WebP poster files.
+PosterStorage — файловая абстракция для WebP-файлов постеров.
 
-Responsibilities:
-    - Generate sequential filenames (000001.webp, 000002.webp, ...)
-    - Write image bytes to disk
-    - Translate filenames to absolute paths and URL paths
+Обязанности:
+    - Генерировать последовательные имена файлов (000001.webp, 000002.webp, ...)
+    - Записывать байты изображения на диск
+    - Преобразовывать имена файлов в абсолютные пути и URL-пути
 
-What it does NOT do:
-    - Know about film_id or any database concept
-    - Decide what to generate or when
-    - Know about Flask or HTTP
+Чего НЕ делает:
+    - Не знает про film_id или любую концепцию базы данных
+    - Не решает, что и когда генерировать
+    - Не знает про Flask или HTTP
 
-The film_id → filename mapping lives only in the database (PosterRepository).
-This separation allows multiple poster versions per film without changing
-the storage layer at all.
+Связь film_id → filename живёт только в базе данных (PosterRepository).
+Такое разделение позволяет хранить несколько версий постера на фильм,
+вообще не меняя слой хранения.
 
-URL note:
-    storage/posters/ is outside Flask's static/ folder by design.
-    get_url() returns '/posters/<filename>' — a Flask route added in Stage 7
-    will serve these files via send_from_directory.
+Заметка про URL:
+    storage/posters/ намеренно находится вне папки static/ Flask.
+    get_url() возвращает '/posters/<filename>' — маршрут Flask, добавленный
+    на Этапе 7, отдаёт эти файлы через send_from_directory.
 """
 
 import os
@@ -33,28 +33,28 @@ _DIGITS = 6  # 000001.webp … 999999.webp
 
 
 class PosterStorage:
-    """Manages WebP poster files in a dedicated storage directory."""
+    """Управляет WebP-файлами постеров в выделенной директории хранения."""
 
     def __init__(self, storage_dir: str):
         """
-        Args:
-            storage_dir: Absolute path to the posters folder.
-                         Typically: <project_root>/storage/posters/
+        Аргументы:
+            storage_dir: Абсолютный путь к папке с постерами.
+                         Обычно: <корень_проекта>/storage/posters/
         """
         self._dir = storage_dir
         os.makedirs(self._dir, exist_ok=True)
 
-    # ── Public API ────────────────────────────────────────────────────
+    # ── Публичный API ────────────────────────────────────────────────────
 
     def save(self, image_bytes: bytes) -> str:
         """
-        Write image bytes to a new sequential file.
+        Записывает байты изображения в новый последовательный файл.
 
-        Returns:
-            The filename, e.g. '000001.webp'.
+        Возвращает:
+            Имя файла, например '000001.webp'.
 
-        Raises:
-            StorageError: If the file cannot be written.
+        Исключения:
+            StorageError: если файл не удалось записать.
         """
         filename = self._next_filename()
         path = self.get_path(filename)
@@ -66,43 +66,43 @@ class PosterStorage:
                 f"Could not write poster file: {path}",
                 details=str(exc),
             ) from exc
-        logger.info(f"Saved poster: {filename} ({len(image_bytes):,} bytes)")
+        logger.info(f"Сохранён постер: {filename} ({len(image_bytes):,} байт)")
         return filename
 
     def get_path(self, filename: str) -> str:
-        """Return the absolute path for a given filename."""
+        """Возвращает абсолютный путь для заданного имени файла."""
         return os.path.join(self._dir, filename)
 
     def get_url(self, filename: str) -> str:
         """
-        Return the URL path Flask will use to serve the file.
-        Requires a '/posters/<filename>' route in routes.py (Stage 7).
+        Возвращает URL-путь, по которому Flask отдаёт файл.
+        Требует маршрут '/posters/<filename>' в routes.py (Этап 7).
         """
         return f"/posters/{filename}"
 
     def file_exists(self, filename: str) -> bool:
-        """Return True if the file is present on disk."""
+        """Возвращает True, если файл присутствует на диске."""
         return os.path.isfile(self.get_path(filename))
 
-    # ── Private helpers ───────────────────────────────────────────────
+    # ── Приватные вспомогательные методы ───────────────────────────────────────
 
     def _next_filename(self) -> str:
         """
-        Determine the next sequential filename.
+        Определяет следующее по порядку имя файла.
 
-        Scans the storage directory for existing *.webp files,
-        finds the highest number, and returns max + 1.
+        Сканирует директорию хранения на предмет существующих *.webp файлов,
+        находит наибольший номер и возвращает max + 1.
 
-        Thread-safety: NOT thread-safe. Sufficient for single-process
-        batch generation. For concurrent generators, replace with a
-        DB sequence or a file-based lock.
+        Потокобезопасность: НЕ потокобезопасно. Достаточно для однопроцессной
+        пакетной генерации. Для параллельных генераторов заменить на
+        последовательность из БД или файловую блокировку.
         """
         existing = self._existing_numbers()
         next_num = max(existing, default=0) + 1
         return f"{next_num:0{_DIGITS}d}{_EXTENSION}"
 
     def _existing_numbers(self) -> list[int]:
-        """Return a list of numeric IDs parsed from existing WebP filenames."""
+        """Возвращает список числовых ID, разобранных из существующих имён WebP-файлов."""
         numbers = []
         try:
             for name in os.listdir(self._dir):

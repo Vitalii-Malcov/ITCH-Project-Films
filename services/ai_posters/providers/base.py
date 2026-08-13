@@ -1,18 +1,18 @@
 """
-Abstract base class for AI image generation providers.
+Абстрактный базовый класс для провайдеров генерации AI-изображений.
 
-Design: Strategy Pattern
-    PosterService depends on AIImageProvider, not on any concrete class.
-    Swapping MockProvider → OpenAIProvider requires one line change at the
-    composition root (poster_service.py or the generation script).
-    Nothing else in the codebase needs to know which provider is active.
+Паттерн проектирования: Strategy
+    PosterService зависит от AIImageProvider, а не от конкретного класса.
+    Замена MockProvider → OpenAIProvider требует изменения одной строки в
+    точке сборки (poster_service.py или скрипте генерации).
+    Больше нигде в кодовой базе не нужно знать, какой провайдер активен.
 """
 
 from abc import ABC, abstractmethod
 
 
 class AIImageProvider(ABC):
-    """Interface that every AI image provider must implement."""
+    """Интерфейс, который должен реализовать каждый AI-провайдер изображений."""
 
     @abstractmethod
     def generate(
@@ -25,40 +25,40 @@ class AIImageProvider(ABC):
         style: str = "",
     ) -> bytes:
         """
-        Generate an image and return its raw bytes (WebP preferred).
+        Генерирует изображение и возвращает его сырые байты (предпочтительно WebP).
 
-        Args:
-            prompt:          Main generation prompt.
-            negative_prompt: What to avoid in the image.
-            width:           Image width in pixels.
-            height:          Image height in pixels.
-            seed:            Optional seed for reproducible results.
-            style:           Style hint, e.g. 'netflix', 'anime', 'vintage'.
+        Аргументы:
+            prompt:          Основной промпт генерации.
+            negative_prompt: Чего избегать на изображении.
+            width:           Ширина изображения в пикселях.
+            height:          Высота изображения в пикселях.
+            seed:            Необязательный seed для воспроизводимых результатов.
+            style:           Подсказка стиля, например 'netflix', 'anime', 'vintage'.
 
-        Returns:
-            Raw image bytes ready to be written to disk.
+        Возвращает:
+            Сырые байты изображения, готовые к записи на диск.
 
-        Raises:
-            ProviderError: If the provider fails or returns an error.
+        Исключения:
+            ProviderError: если провайдер упал или вернул ошибку.
         """
 
     @abstractmethod
     def health_check(self) -> bool:
         """
-        Return True if the provider is reachable and ready to generate.
-        Used by scripts to verify connectivity before starting a batch run.
+        Возвращает True, если провайдер доступен и готов генерировать.
+        Используется скриптами для проверки связи перед началом пакетного запуска.
         """
 
     @abstractmethod
     def provider_name(self) -> str:
         """
-        Return a short provider identifier stored in the database.
-        Examples: 'openai', 'mock', 'stability', 'google'.
+        Возвращает короткий идентификатор провайдера, хранимый в базе данных.
+        Примеры: 'openai', 'mock', 'stability', 'google'.
         """
 
     @abstractmethod
     def model_name(self) -> str:
         """
-        Return the specific model name stored in the database.
-        Examples: 'dall-e-3', 'mock-v1', 'stable-diffusion-xl'.
+        Возвращает конкретное название модели, хранимое в базе данных.
+        Примеры: 'dall-e-3', 'mock-v1', 'stable-diffusion-xl'.
         """

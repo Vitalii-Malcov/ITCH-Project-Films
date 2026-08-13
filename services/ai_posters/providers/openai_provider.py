@@ -1,19 +1,21 @@
 """
-OpenAIProvider — generates movie poster images using the OpenAI Images API.
+OpenAIProvider — генерирует изображения постеров фильмов через OpenAI Images API.
 
-Primary model: gpt-image-2 (GPT Image, default)
-Backward-compatible fallback: dall-e-3, dall-e-2
+Основная модель: gpt-image-2 (GPT Image, по умолчанию)
+Обратно совместимый fallback: dall-e-3, dall-e-2
 
-Design rules:
-    - Reads OPENAI_API_KEY from env; never from code or local_settings.
-    - Requests WebP directly from GPT Image (output_format="webp").
-    - If the API already returns WebP bytes, skips Pillow re-encoding.
-    - If the API returns PNG/JPEG (other models), converts to WebP via Pillow.
-    - Maps caller dimensions to the correct size for the active model family.
-    - seed is silently ignored (not supported by any current OpenAI image model).
-    - style and negative_prompt are appended to the text prompt, not sent as
-      separate API parameters, to avoid model-specific API differences.
-    - Raises ProviderError subclasses so PosterService catches them uniformly.
+Правила проектирования:
+    - Читает OPENAI_API_KEY из окружения; никогда из кода или local_settings.
+    - Запрашивает WebP напрямую у GPT Image (output_format="webp").
+    - Если API уже вернул байты WebP, пропускает перекодирование через Pillow.
+    - Если API вернул PNG/JPEG (другие модели), конвертирует в WebP через Pillow.
+    - Сопоставляет размеры вызывающего кода с корректным размером для активного
+      семейства моделей.
+    - seed молча игнорируется (не поддерживается ни одной текущей моделью
+      изображений OpenAI).
+    - style и negative_prompt добавляются в текстовый промпт, а не отправляются
+      как отдельные параметры API, чтобы избежать различий API между моделями.
+    - Выбрасывает подклассы ProviderError, чтобы PosterService ловил их единообразно.
 """
 
 import base64
@@ -33,37 +35,37 @@ from services.ai_posters.providers.base import AIImageProvider
 
 logger = logging.getLogger(__name__)
 
-# ── Defaults — single source of truth ────────────────────────────────────────
+# ── Значения по умолчанию — единый источник истины ────────────────────────────
 DEFAULT_MODEL       = "gpt-image-2"
-DEFAULT_QUALITY     = "low"         # "low" is cheapest — good for first tests
-DEFAULT_OUTPUT_FMT  = "webp"        # GPT Image can return WebP natively
-DEFAULT_COMPRESSION = 80            # 0–100, controls WebP/JPEG output quality
+DEFAULT_QUALITY     = "low"         # "low" — самый дешёвый вариант, хорош для первых тестов
+DEFAULT_OUTPUT_FMT  = "webp"        # GPT Image умеет отдавать WebP нативно
+DEFAULT_COMPRESSION = 80            # 0–100, управляет качеством вывода WebP/JPEG
 
-# ── GPT Image (gpt-image-2) supported sizes ───────────────────────────────────
+# ── Поддерживаемые размеры GPT Image (gpt-image-2) ────────────────────────────
 _GPT_PORTRAIT   = "1024x1536"
 _GPT_LANDSCAPE  = "1536x1024"
 _GPT_SQUARE     = "1024x1024"
 
-# ── DALL-E 3 supported sizes ──────────────────────────────────────────────────
+# ── Поддерживаемые размеры DALL-E 3 ────────────────────────────────────────────
 _DALLE3_PORTRAIT  = "1024x1792"
 _DALLE3_LANDSCAPE = "1792x1024"
 _DALLE3_SQUARE    = "1024x1024"
 
-# ── DALL-E 2 supported sizes (largest-first for nearest-fit) ─────────────────
+# ── Поддерживаемые размеры DALL-E 2 (сначала самые крупные — для ближайшего подбора) ─
 _DALLE2_SIZES = ["1024x1024", "512x512", "256x256"]
 
 
 class OpenAIProvider(AIImageProvider):
     """
-    AI image provider backed by OpenAI Images API.
+    Провайдер AI-изображений на основе OpenAI Images API.
 
-    Default model: gpt-image-2 (GPT Image family).
+    Модель по умолчанию: gpt-image-2 (семейство GPT Image).
 
-    Usage:
-        provider = OpenAIProvider()                        # reads env vars
-        provider = OpenAIProvider(api_key="sk-...")        # explicit key
-        provider = OpenAIProvider(model="dall-e-3")        # older model
-        provider = OpenAIProvider(quality="high")          # higher quality
+    Использование:
+        provider = OpenAIProvider()                        # читает переменные окружения
+        provider = OpenAIProvider(api_key="sk-...")        # явный ключ
+        provider = OpenAIProvider(model="dall-e-3")        # более старая модель
+        provider = OpenAIProvider(quality="high")          # более высокое качество
     """
 
     def __init__(
@@ -75,19 +77,20 @@ class OpenAIProvider(AIImageProvider):
         output_compression: int | None = None,
     ) -> None:
         """
-        Args:
-            api_key:            OpenAI key. Falls back to OPENAI_API_KEY env var.
-            model:              Model name. Falls back to OPENAI_IMAGE_MODEL env var,
-                                then to DEFAULT_MODEL ('gpt-image-2').
-            quality:            Generation quality. Falls back to OPENAI_IMAGE_QUALITY
-                                env var, then to DEFAULT_QUALITY ('low').
-            output_format:      Image format. Falls back to OPENAI_IMAGE_FORMAT env var,
-                                then to DEFAULT_OUTPUT_FMT ('webp').
-            output_compression: Compression level 0–100. Falls back to
-                                OPENAI_IMAGE_COMPRESSION env var, then 80.
+        Аргументы:
+            api_key:            Ключ OpenAI. По умолчанию берётся из env-переменной
+                                OPENAI_API_KEY.
+            model:              Название модели. По умолчанию из env-переменной
+                                OPENAI_IMAGE_MODEL, затем из DEFAULT_MODEL ('gpt-image-2').
+            quality:            Качество генерации. По умолчанию из env-переменной
+                                OPENAI_IMAGE_QUALITY, затем из DEFAULT_QUALITY ('low').
+            output_format:      Формат изображения. По умолчанию из env-переменной
+                                OPENAI_IMAGE_FORMAT, затем из DEFAULT_OUTPUT_FMT ('webp').
+            output_compression: Уровень сжатия 0–100. По умолчанию из env-переменной
+                                OPENAI_IMAGE_COMPRESSION, затем 80.
 
-        Raises:
-            ProviderConfigurationError: If no API key is available.
+        Исключения:
+            ProviderConfigurationError: если API-ключ недоступен.
         """
         key = api_key or os.getenv("OPENAI_API_KEY", "")
         if not key:
@@ -118,7 +121,7 @@ class OpenAIProvider(AIImageProvider):
             self._model, self._quality, self._output_fmt, self._compression,
         )
 
-    # ── AIImageProvider interface ──────────────────────────────────────────────
+    # ── Интерфейс AIImageProvider ──────────────────────────────────────────────
 
     def generate(
         self,
@@ -130,25 +133,26 @@ class OpenAIProvider(AIImageProvider):
         style: str = "",
     ) -> bytes:
         """
-        Generate a poster image and return WebP bytes.
+        Генерирует изображение постера и возвращает байты WebP.
 
-        Parameter notes:
-            negative_prompt — appended to prompt as text ("Avoid: ...").
-                              GPT Image has no dedicated negative_prompt param.
-            style           — expected to be already embedded in prompt by
-                              prompt_builder.build_prompt(); passed separately
-                              only when non-empty, as an additional clause.
-            seed            — not supported by any current OpenAI image model;
-                              silently ignored.
-            width / height  — mapped to the nearest size the model supports.
+        Заметки по параметрам:
+            negative_prompt — добавляется в prompt как текст ("Avoid: ...").
+                              У GPT Image нет отдельного параметра negative_prompt.
+            style           — ожидается, что уже встроен в prompt через
+                              prompt_builder.build_prompt(); передаётся отдельно
+                              только когда непустой, как дополнительное уточнение.
+            seed            — не поддерживается ни одной текущей моделью
+                              изображений OpenAI; молча игнорируется.
+            width / height  — сопоставляются с ближайшим поддерживаемым моделью
+                              размером.
 
-        Returns:
-            Raw WebP bytes ready for PosterStorage.save().
+        Возвращает:
+            Сырые байты WebP, готовые для PosterStorage.save().
 
-        Raises:
-            ProviderConfigurationError: API key is invalid or revoked.
-            ProviderRateLimitError:     Rate limit exceeded.
-            ProviderError:              Any other API or decoding failure.
+        Исключения:
+            ProviderConfigurationError: API-ключ недействителен или отозван.
+            ProviderRateLimitError:     превышен лимит запросов.
+            ProviderError:              любая другая ошибка API или декодирования.
         """
         if seed is not None:
             logger.debug("OpenAIProvider: seed ignored (not supported by OpenAI images API)")
@@ -193,8 +197,8 @@ class OpenAIProvider(AIImageProvider):
 
     def health_check(self) -> bool:
         """
-        Return True if the API is reachable and the model exists.
-        Uses models.retrieve() — much cheaper than generating an image.
+        Возвращает True, если API доступен и модель существует.
+        Использует models.retrieve() — значительно дешевле, чем генерация изображения.
         """
         try:
             self._client.models.retrieve(self._model)
@@ -212,13 +216,13 @@ class OpenAIProvider(AIImageProvider):
     def model_name(self) -> str:
         return self._model
 
-    # ── Private helpers ───────────────────────────────────────────────────────
+    # ── Приватные вспомогательные методы ───────────────────────────────────────
 
     @staticmethod
     def _build_full_prompt(prompt: str, negative_prompt: str) -> str:
         """
-        Merge negative_prompt into the main prompt as a text guidance clause.
-        GPT Image has no dedicated negative_prompt API parameter.
+        Встраивает negative_prompt в основной промпт как текстовое уточнение.
+        У GPT Image нет отдельного параметра API negative_prompt.
         """
         if negative_prompt.strip():
             return f"{prompt}. Avoid: {negative_prompt.strip()}."
@@ -226,11 +230,12 @@ class OpenAIProvider(AIImageProvider):
 
     def _map_size(self, width: int, height: int) -> str:
         """
-        Map requested dimensions to the nearest API-supported size string.
+        Сопоставляет запрошенные размеры с ближайшей строкой размера,
+        поддерживаемой API.
 
-        GPT Image (gpt-image-2): portrait 1024x1536, square 1024x1024, landscape 1536x1024
-        DALL-E 3:                 portrait 1024x1792, square 1024x1024, landscape 1792x1024
-        DALL-E 2:                 snaps to nearest of 1024, 512, 256 (square only)
+        GPT Image (gpt-image-2): портрет 1024x1536, квадрат 1024x1024, альбом 1536x1024
+        DALL-E 3:                 портрет 1024x1792, квадрат 1024x1024, альбом 1792x1024
+        DALL-E 2:                 округляется до ближайшего из 1024, 512, 256 (только квадрат)
         """
         model = self._model.lower()
 
@@ -248,20 +253,20 @@ class OpenAIProvider(AIImageProvider):
                 return _DALLE3_PORTRAIT
             return _DALLE3_SQUARE
 
-        # DALL-E 2 and unknown models: snap to nearest supported square
+        # DALL-E 2 и неизвестные модели: округляем до ближайшего поддерживаемого квадрата
         target = max(width, height)
         for size_str in _DALLE2_SIZES:
             side = int(size_str.split("x")[0])
             if target >= side:
                 return size_str
-        return _DALLE2_SIZES[-1]  # minimum 256x256
+        return _DALLE2_SIZES[-1]  # минимум 256x256
 
     def _build_api_params(self, full_prompt: str, size: str) -> dict:
         """
-        Construct the kwargs dict for images.generate() based on the active model.
+        Формирует словарь kwargs для images.generate() в зависимости от активной модели.
 
-        GPT Image (gpt-image-2) supports output_format, output_compression,
-        and quality. DALL-E models use response_format instead.
+        GPT Image (gpt-image-2) поддерживает output_format, output_compression
+        и quality. Модели DALL-E используют вместо этого response_format.
         """
         model = self._model.lower()
 
@@ -273,24 +278,24 @@ class OpenAIProvider(AIImageProvider):
         }
 
         if "gpt-image" in model:
-            # GPT Image native params — requests WebP directly from the API
+            # Нативные параметры GPT Image — запрашивают WebP напрямую у API
             params["quality"]            = self._quality
             params["output_format"]      = self._output_fmt
             params["output_compression"] = self._compression
         else:
-            # DALL-E 3 / DALL-E 2: use legacy response_format for b64 delivery
+            # DALL-E 3 / DALL-E 2: используем устаревший response_format для доставки в b64
             params["response_format"] = "b64_json"
 
         return params
 
     def _extract_and_ensure_webp(self, response) -> bytes:
         """
-        Extract image bytes from the API response and guarantee WebP output.
+        Извлекает байты изображения из ответа API и гарантирует вывод в WebP.
 
-        Decoding path:
-            b64_json present → base64 decode → _ensure_webp()
-            url present      → download      → _ensure_webp()  (fallback)
-            neither          → ProviderError
+        Путь декодирования:
+            есть b64_json → декодировать из base64 → _ensure_webp()
+            есть url      → скачать          → _ensure_webp()  (fallback)
+            нет ни того, ни другого → ProviderError
         """
         if not response.data:
             raise ProviderError(
@@ -303,7 +308,7 @@ class OpenAIProvider(AIImageProvider):
         if image_data.b64_json:
             raw_bytes = self._decode_base64(image_data.b64_json)
         elif image_data.url:
-            # URL fallback — other models or response_format="url" path
+            # Fallback через URL — путь для других моделей или response_format="url"
             raw_bytes = self._download_url(image_data.url)
         else:
             raise ProviderError(
@@ -314,7 +319,7 @@ class OpenAIProvider(AIImageProvider):
         return self._ensure_webp(raw_bytes)
 
     def _decode_base64(self, b64_data: str) -> bytes:
-        """Decode a base64 string and return raw bytes."""
+        """Декодирует строку base64 и возвращает сырые байты."""
         try:
             return base64.b64decode(b64_data)
         except Exception as exc:
@@ -325,7 +330,7 @@ class OpenAIProvider(AIImageProvider):
             ) from exc
 
     def _download_url(self, url: str) -> bytes:
-        """Download image bytes from a URL (fallback when b64_json is absent)."""
+        """Скачивает байты изображения по URL (fallback, когда b64_json отсутствует)."""
         try:
             with urllib.request.urlopen(url, timeout=30) as resp:
                 return resp.read()
@@ -338,13 +343,13 @@ class OpenAIProvider(AIImageProvider):
 
     def _ensure_webp(self, image_bytes: bytes) -> bytes:
         """
-        Return WebP bytes.
+        Возвращает байты WebP.
 
-        If the input is already WebP (e.g. GPT Image returned output_format=webp),
-        it is returned unchanged — no re-encoding, no quality loss.
-        Otherwise Pillow converts PNG / JPEG / any supported format to WebP.
+        Если на входе уже WebP (например, GPT Image вернул output_format=webp),
+        возвращается без изменений — без перекодирования, без потери качества.
+        Иначе Pillow конвертирует PNG / JPEG / любой поддерживаемый формат в WebP.
 
-        Raises ProviderError for empty or unreadable input.
+        Выбрасывает ProviderError для пустых или нечитаемых данных.
         """
         if not image_bytes:
             raise ProviderError(
@@ -356,10 +361,10 @@ class OpenAIProvider(AIImageProvider):
             from PIL import Image
             img = Image.open(io.BytesIO(image_bytes))
             if img.format == "WEBP":
-                # Already WebP — skip re-encoding to avoid quality loss
+                # Уже WebP — пропускаем перекодирование, чтобы не терять качество
                 logger.debug("OpenAIProvider: API returned WebP natively, skipping re-encode")
                 return image_bytes
-            # PNG / JPEG / other → WebP
+            # PNG / JPEG / другое → WebP
             logger.debug(
                 "OpenAIProvider: converting %s → WebP (compression=%d)",
                 img.format, self._compression,

@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 _client = MockImageClient()
 
-# Absolute path to the generated images folder, derived from this file's location
+# Абсолютный путь к папке сгенерированных изображений, вычисленный от расположения этого файла
 _project_root = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
@@ -25,12 +25,12 @@ def generate_poster_if_missing(
     description: str,
 ) -> str:
     """
-    Generate a poster for the film if one is not already in movie_posters.
+    Генерирует постер для фильма, если он ещё не сохранён в movie_posters.
 
-    Returns:
-        'generated' — new poster created and saved
-        'skipped'   — record already existed, nothing to do
-        'failed'    — an error occurred
+    Возвращает:
+        'generated' — новый постер создан и сохранён
+        'skipped'   — запись уже существовала, ничего не делаем
+        'failed'    — произошла ошибка
     """
     if poster_repository.poster_record_exists(film_id):
         return 'skipped'
@@ -53,9 +53,9 @@ def generate_poster_if_missing(
             image_url=image_url,
             status='generated',
         )
-        logger.info(f"Poster generated for film_id={film_id}: {title}")
+        logger.info(f"Постер сгенерирован для film_id={film_id}: {title}")
         return 'generated'
 
     except Exception as e:
-        logger.error(f"Poster generation failed for film_id={film_id}: {e}")
+        logger.error(f"Генерация постера не удалась для film_id={film_id}: {e}")
         return 'failed'

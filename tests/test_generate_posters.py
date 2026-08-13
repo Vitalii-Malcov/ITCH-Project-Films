@@ -1,12 +1,12 @@
 """
-Unit tests for scripts/generate_movie_posters.py and the new
-PosterRepository.openai_poster_exists / get_openai_completed_film_ids methods.
+Unit-тесты для scripts/generate_movie_posters.py и новых методов
+PosterRepository.openai_poster_exists / get_openai_completed_film_ids.
 
-Rules:
-    - No real database connections.
-    - No real OpenAI API calls.
-    - No file I/O.
-    - Tests are fully independent.
+Правила:
+    - Никаких реальных подключений к базе данных.
+    - Никаких реальных вызовов OpenAI API.
+    - Никакого файлового I/O.
+    - Тесты полностью независимы.
 """
 
 import argparse
@@ -14,7 +14,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 
-# ── Shared test film factory ───────────────────────────────────────────
+# ── Общая фабрика тестового фильма ───────────────────────────────────────────
 
 def _make_film(
     film_id: int = 1,
@@ -38,7 +38,7 @@ def _make_queue_item(film_id: int, queue_id: int | None = None) -> dict:
     return {'id': queue_id or film_id, 'film_id': film_id}
 
 
-# ── 1. Argument parsing ───────────────────────────────────────────────
+# ── 1. Разбор аргументов ───────────────────────────────────────────────
 
 class TestParseArgs:
 
@@ -71,7 +71,7 @@ class TestParseArgs:
         assert args.dry_run is True
 
 
-# ── 2. Description fallback logic ─────────────────────────────────────
+# ── 2. Логика fallback описания ─────────────────────────────────────
 
 class TestBuildDescription:
 
@@ -107,7 +107,7 @@ class TestBuildDescription:
         assert 'Action' in desc
 
     def test_fallback_does_not_use_film_id(self):
-        """Prompt must never be built from film_id alone."""
+        """Промпт никогда не должен строиться только из film_id."""
         film = _make_film(film_id=999, title='STAR FILM', genre='Sci-Fi', description=None)
         desc, _ = self._call(film)
         assert '999' not in desc
@@ -156,10 +156,10 @@ class TestOpenaiPosterExists:
         assert 'completed' in sql
 
     def test_query_does_not_match_mock_posters(self):
-        """The query must explicitly select provider='openai', not any provider."""
+        """Запрос должен явно выбирать provider='openai', а не любого провайдера."""
         _, cursor = self._call(fetchone_return=None)
         sql = cursor.execute.call_args[0][0].lower()
-        # Must filter on provider — not just status
+        # Должен фильтровать по provider — не только по status
         assert 'provider' in sql
 
 
@@ -200,7 +200,7 @@ class TestGetOpenaiCompletedFilmIds:
         assert 'completed' in sql
 
 
-# ── 5. Single-film mode (_run_single_film) ────────────────────────────
+# ── 5. Режим одного фильма (_run_single_film) ────────────────────────
 
 class TestRunSingleFilm:
 
@@ -259,7 +259,7 @@ class TestRunSingleFilm:
         service.generate.assert_called_once()
 
     def test_correct_description_passed_to_service(self):
-        """When description exists, the real description must reach service.generate()."""
+        """Когда описание существует, настоящее описание должно дойти до service.generate()."""
         from scripts.generate_movie_posters import _run_single_film
         service = self._make_service()
         repo    = MagicMock()
@@ -273,7 +273,7 @@ class TestRunSingleFilm:
         assert kwargs['description'] == 'An epic adventure across the ocean.'
 
     def test_fallback_description_passed_when_empty(self):
-        """When description is None, the fallback (title+genre) must reach service."""
+        """Когда description=None, fallback (title+genre) должен дойти до сервиса."""
         from scripts.generate_movie_posters import _run_single_film
         service = self._make_service()
         repo    = MagicMock()
@@ -302,7 +302,7 @@ class TestRunSingleFilm:
         assert exc_info.value.code == 1
 
     def test_film_id_passed_to_service(self):
-        """The correct film_id from Sakila must reach service.generate()."""
+        """Правильный film_id из Sakila должен дойти до service.generate()."""
         from scripts.generate_movie_posters import _run_single_film
         service = self._make_service()
         repo    = MagicMock()
@@ -316,7 +316,7 @@ class TestRunSingleFilm:
         assert kwargs['film_id'] == 77
 
 
-# ── 6. Batch mode (_run_batch) ────────────────────────────────────────
+# ── 6. Пакетный режим (_run_batch) ────────────────────────────────────
 
 class TestRunBatch:
 
@@ -367,7 +367,7 @@ class TestRunBatch:
     # ── limit ──────────────────────────────────────────────────────────
 
     def test_limit_stops_after_n_generated(self):
-        """With limit=2 and 3 pending films, only 2 must be generated."""
+        """При limit=2 и 3 фильмах в pending должны сгенерироваться только 2."""
         films = [_make_film(i, title=f'FILM {i}') for i in range(1, 4)]
         pending = [[_make_queue_item(i, i * 10) for i in range(1, 4)]]
 
@@ -383,10 +383,10 @@ class TestRunBatch:
 
         assert service.generate.call_count == 1
 
-    # ── error handling ─────────────────────────────────────────────────
+    # ── обработка ошибок ─────────────────────────────────────────────────
 
     def test_error_on_first_film_does_not_stop_second(self):
-        """A failed generation must not stop the batch — next film is still attempted."""
+        """Неудачная генерация не должна останавливать пакет — следующий фильм всё равно обрабатывается."""
         films = [_make_film(1, title='FAIL FILM'), _make_film(2, title='OK FILM')]
         pending = [[_make_queue_item(1, 10), _make_queue_item(2, 20)]]
 
@@ -402,7 +402,7 @@ class TestRunBatch:
         queue.mark_done.assert_called()
 
     def test_failed_item_queue_status_is_failed(self):
-        """mark_failed must be called for the failing item."""
+        """mark_failed должен быть вызван для неудачного элемента."""
         films   = [_make_film(1)]
         pending = [[_make_queue_item(1, 10)]]
 
@@ -415,13 +415,13 @@ class TestRunBatch:
 
         queue.mark_failed.assert_called_with(10)
 
-    # ── skip logic ─────────────────────────────────────────────────────
+    # ── логика пропуска ─────────────────────────────────────────────────
 
     def test_skip_does_not_count_toward_limit(self):
         """
-        Film 1 has an OpenAI poster → skip (no limit decrement).
-        Film 2 does not → generate → limit=1 satisfied.
-        Only film 2 must be generated.
+        У фильма 1 есть постер OpenAI → пропуск (лимит не уменьшается).
+        У фильма 2 нет → генерация → limit=1 выполнен.
+        Должен сгенерироваться только фильм 2.
         """
         films   = [_make_film(1, title='DONE FILM'), _make_film(2, title='NEW FILM')]
         pending = [[_make_queue_item(1, 10), _make_queue_item(2, 20)]]
@@ -438,22 +438,22 @@ class TestRunBatch:
         assert service.generate.call_args.kwargs['film_id'] == 2
 
     def test_mock_poster_does_not_prevent_generation(self):
-        """openai_poster_exists must return False for mock-posterized films."""
+        """openai_poster_exists должен возвращать False для фильмов с mock-постером."""
         films   = [_make_film(1)]
         pending = [[_make_queue_item(1, 10)]]
 
-        # Simulate: film 1 has a mock poster but no OpenAI poster
+        # Имитация: у фильма 1 есть mock-постер, но нет постера OpenAI
         service, _, _ = self._run(
             self._make_args(limit=1),
             films,
             pending,
-            openai_exists_map={1: False},   # openai_poster_exists returns False
+            openai_exists_map={1: False},   # openai_poster_exists возвращает False
         )
 
         service.generate.assert_called_once()
 
     def test_skipped_film_queue_item_marked_done(self):
-        """When a film is skipped, its queue item must be marked done."""
+        """Когда фильм пропущен, его элемент очереди должен быть помечен done."""
         films   = [_make_film(1)]
         pending = [[_make_queue_item(1, 10)]]
 
@@ -490,10 +490,10 @@ class TestRunBatch:
 
         service.generate.assert_not_called()
 
-    # ── queue interaction ──────────────────────────────────────────────
+    # ── взаимодействие с очередью ──────────────────────────────────────
 
     def test_mark_processing_called_before_generate(self):
-        """queue.mark_processing must be called before service.generate."""
+        """queue.mark_processing должен вызываться до service.generate."""
         films   = [_make_film(1)]
         pending = [[_make_queue_item(1, 10)]]
         call_order = []
@@ -528,9 +528,9 @@ class TestRunBatch:
         assert call_order == ['mark_processing', 'generate']
 
     def test_missing_film_id_in_lookup_marks_failed(self):
-        """Queue item whose film_id is not in Sakila must be marked failed."""
-        films   = [_make_film(1)]  # Only film 1 in Sakila
-        pending = [[_make_queue_item(999, 50)]]   # film 999 not in Sakila
+        """Элемент очереди, чей film_id отсутствует в Sakila, должен быть помечен failed."""
+        films   = [_make_film(1)]  # В Sakila только фильм 1
+        pending = [[_make_queue_item(999, 50)]]   # фильма 999 нет в Sakila
 
         service, _, queue = self._run(
             self._make_args(limit=1),
@@ -542,15 +542,15 @@ class TestRunBatch:
         service.generate.assert_not_called()
 
 
-# ── 7. --dry-run contract: must be fully read-only ────────────────────
+# ── 7. Контракт --dry-run: должен быть полностью read-only ────────────────────
 
 class TestDryRunSafety:
     """
-    Verify that --dry-run is a true no-op with respect to DB writes,
-    file creation, and API calls.
+    Проверяет, что --dry-run — настоящий no-op в отношении записи в БД,
+    создания файлов и вызовов API.
     """
 
-    # ── shared helpers ─────────────────────────────────────────────────
+    # ── общие вспомогательные методы ─────────────────────────────────────────────
 
     def _batch_dry_run(
         self,
@@ -559,8 +559,8 @@ class TestDryRunSafety:
         limit: int = 5,
     ) -> tuple[MagicMock, MagicMock, MagicMock]:
         """
-        Call _run_batch with dry_run=True and return (service, repository, queue) mocks.
-        _fetch_films is patched so no real DB connection is made.
+        Вызывает _run_batch с dry_run=True и возвращает моки (service, repository, queue).
+        _fetch_films запатчен, поэтому реальное подключение к БД не создаётся.
         """
         from scripts.generate_movie_posters import _run_batch
 
@@ -580,56 +580,56 @@ class TestDryRunSafety:
         with patch('sys.argv', ['script'] + argv):
             return parse_args()
 
-    # ── Tests 1–7: batch dry-run is read-only ──────────────────────────
+    # ── Тесты 1–7: пакетный dry-run — только чтение ──────────────────────────
 
     def test_batch_dry_run_does_not_create_openai_provider(self):
-        """OpenAIProvider must never be instantiated in dry-run mode."""
+        """OpenAIProvider никогда не должен создаваться в режиме dry-run."""
         with patch('scripts.generate_movie_posters.OpenAIProvider') as mock_cls:
             self._batch_dry_run([_make_film(1)])
         mock_cls.assert_not_called()
 
     def test_batch_dry_run_does_not_call_service(self):
-        """PosterService.generate must not be called in dry-run mode."""
+        """PosterService.generate не должен вызываться в режиме dry-run."""
         service, _, _ = self._batch_dry_run([_make_film(1)])
         service.generate.assert_not_called()
 
     def test_batch_dry_run_does_not_call_repository_create_table(self):
-        """repository.create_table must not be called in dry-run mode."""
+        """repository.create_table не должен вызываться в режиме dry-run."""
         _, repository, _ = self._batch_dry_run([_make_film(1)])
         repository.create_table.assert_not_called()
 
     def test_batch_dry_run_does_not_call_queue_create_table(self):
-        """queue.create_table must not be called in dry-run mode."""
+        """queue.create_table не должен вызываться в режиме dry-run."""
         _, _, queue = self._batch_dry_run([_make_film(1)])
         queue.create_table.assert_not_called()
 
     def test_batch_dry_run_does_not_call_bulk_enqueue(self):
-        """queue.bulk_enqueue must not be called in dry-run mode."""
+        """queue.bulk_enqueue не должен вызываться в режиме dry-run."""
         _, _, queue = self._batch_dry_run([_make_film(1)])
         queue.bulk_enqueue.assert_not_called()
 
     def test_batch_dry_run_does_not_call_reset_stuck_processing(self):
-        """_reset_stuck_processing must not be called in dry-run mode."""
+        """_reset_stuck_processing не должен вызываться в режиме dry-run."""
         with patch('scripts.generate_movie_posters._reset_stuck_processing') as mock_reset:
             self._batch_dry_run([_make_film(1)])
         mock_reset.assert_not_called()
 
     def test_batch_dry_run_does_not_call_any_mark_method(self):
-        """No queue status changes are allowed in dry-run mode."""
+        """В режиме dry-run изменения статуса очереди недопустимы."""
         _, _, queue = self._batch_dry_run([_make_film(1)])
         queue.mark_processing.assert_not_called()
         queue.mark_done.assert_not_called()
         queue.mark_failed.assert_not_called()
 
     def test_batch_dry_run_does_not_create_files(self):
-        """service.generate (which calls storage.save) must not run in dry-run."""
+        """service.generate (который вызывает storage.save) не должен выполняться в dry-run."""
         service, _, _ = self._batch_dry_run([_make_film(1)])
         service.generate.assert_not_called()
 
-    # ── Tests 8–9: single-film dry-run ────────────────────────────────
+    # ── Тесты 8–9: dry-run для одного фильма ────────────────────────────
 
     def test_single_film_dry_run_does_not_call_api(self):
-        """service.generate must not be called in single-film dry-run mode."""
+        """service.generate не должен вызываться в режиме dry-run для одного фильма."""
         from scripts.generate_movie_posters import _run_single_film
         service = MagicMock()
 
@@ -644,7 +644,7 @@ class TestDryRunSafety:
         service.generate.assert_not_called()
 
     def test_single_film_dry_run_builds_prompt_from_title_genre_description(self):
-        """build_prompt must be called with real title, genre, description in dry-run."""
+        """build_prompt должен вызываться с настоящими title, genre, description в dry-run."""
         from scripts.generate_movie_posters import _run_single_film
         film = _make_film(title='UNIQUE TITLE', genre='Thriller', description='Dark mystery.')
 
@@ -664,42 +664,42 @@ class TestDryRunSafety:
             style='auto',
         )
 
-    # ── Tests 10–13: argument validation ─────────────────────────────
+    # ── Тесты 10–13: валидация аргументов ─────────────────────────────
 
     def test_limit_zero_is_rejected(self):
-        """--limit 0 must be rejected by argparse before any DB connection."""
+        """--limit 0 должен отклоняться argparse до любого подключения к БД."""
         with pytest.raises(SystemExit) as exc_info:
             self._parse(['--limit', '0'])
         assert exc_info.value.code != 0
 
     def test_limit_negative_is_rejected(self):
-        """--limit -1 must be rejected by argparse before any DB connection."""
+        """--limit -1 должен отклоняться argparse до любого подключения к БД."""
         with pytest.raises(SystemExit) as exc_info:
             self._parse(['--limit', '-1'])
         assert exc_info.value.code != 0
 
     def test_film_id_zero_is_rejected(self):
-        """--film-id 0 must be rejected by argparse before any DB connection."""
+        """--film-id 0 должен отклоняться argparse до любого подключения к БД."""
         with pytest.raises(SystemExit) as exc_info:
             self._parse(['--film-id', '0'])
         assert exc_info.value.code != 0
 
     def test_film_id_negative_is_rejected(self):
-        """--film-id -5 must be rejected by argparse before any DB connection."""
+        """--film-id -5 должен отклоняться argparse до любого подключения к БД."""
         with pytest.raises(SystemExit) as exc_info:
             self._parse(['--film-id', '-5'])
         assert exc_info.value.code != 0
 
 
-# ── 8. Queue sync: GenerationQueue.sync_for_openai_generation ────────
+# ── 8. Синхронизация очереди: GenerationQueue.sync_for_openai_generation ────────
 
 class TestQueueSync:
     """
-    Tests for GenerationQueue.sync_for_openai_generation(),
-    retry_failed(), get_pending() ordering, and the --retry-failed CLI flag.
+    Тесты для GenerationQueue.sync_for_openai_generation(),
+    retry_failed(), порядка get_pending() и CLI-флага --retry-failed.
     """
 
-    # ── helper ────────────────────────────────────────────────────────
+    # ── вспомогательный метод ────────────────────────────────────────────────────
 
     @staticmethod
     def _call_sync(
@@ -709,11 +709,11 @@ class TestQueueSync:
         processing_timeout_minutes: int = 30,
     ) -> tuple[dict, MagicMock]:
         """
-        Call sync_for_openai_generation with a fully mocked DB connection.
+        Вызывает sync_for_openai_generation с полностью замоканным подключением к БД.
 
-        existing_queue values may be:
-          'pending'           → str shorthand (age_minutes defaults to 0)
-          ('processing', 45)  → tuple (status, age_minutes) for processing tests
+        Значения existing_queue могут быть:
+          'pending'           → сокращение-строка (age_minutes по умолчанию 0)
+          ('processing', 45)  → кортеж (status, age_minutes) для тестов processing
         """
         from services.ai_posters.queue import GenerationQueue
 
@@ -739,10 +739,10 @@ class TestQueueSync:
 
         return result, mock_cursor
 
-    # ── Tests 1–6: sync status rules ──────────────────────────────────
+    # ── Тесты 1–6: правила статусов синхронизации ──────────────────────────────
 
     def test_done_without_openai_set_to_pending(self):
-        """queue='done' (from MockProvider) but no OpenAI poster → pending."""
+        """queue='done' (от MockProvider), но нет постера OpenAI → pending."""
         result, _ = self._call_sync(
             film_ids=[10],
             openai_done_ids=set(),
@@ -752,7 +752,7 @@ class TestQueueSync:
         assert result['unchanged']      == 0
 
     def test_failed_without_openai_remains_failed(self):
-        """queue='failed' and no OpenAI poster → unchanged (use --retry-failed)."""
+        """queue='failed' и нет постера OpenAI → без изменений (используйте --retry-failed)."""
         result, _ = self._call_sync(
             film_ids=[7],
             openai_done_ids=set(),
@@ -762,7 +762,7 @@ class TestQueueSync:
         assert result['set_to_pending'] == 0
 
     def test_pending_without_openai_unchanged(self):
-        """queue='pending' and no OpenAI poster → unchanged."""
+        """queue='pending' и нет постера OpenAI → без изменений."""
         result, _ = self._call_sync(
             film_ids=[5],
             openai_done_ids=set(),
@@ -772,7 +772,7 @@ class TestQueueSync:
         assert result['set_to_pending'] == 0
 
     def test_completed_openai_set_to_done(self):
-        """Completed OpenAI poster + queue='pending' → done."""
+        """Завершённый постер OpenAI + queue='pending' → done."""
         result, _ = self._call_sync(
             film_ids=[1],
             openai_done_ids={1},
@@ -783,31 +783,31 @@ class TestQueueSync:
         assert result['unchanged']      == 0
 
     def test_fresh_processing_remains_processing(self):
-        """queue='processing' with age < timeout → unchanged (still active)."""
+        """queue='processing' с age < timeout → без изменений (ещё активен)."""
         result, _ = self._call_sync(
             film_ids=[3],
             openai_done_ids=set(),
-            existing_queue={3: ('processing', 5)},   # 5 minutes old
+            existing_queue={3: ('processing', 5)},   # 5 минут назад
             processing_timeout_minutes=30,
         )
         assert result['unchanged']      == 1
         assert result['set_to_pending'] == 0
 
     def test_stale_processing_reset_to_pending(self):
-        """queue='processing' with age >= timeout → pending (stuck run)."""
+        """queue='processing' с age >= timeout → pending (зависший запуск)."""
         result, _ = self._call_sync(
             film_ids=[3],
             openai_done_ids=set(),
-            existing_queue={3: ('processing', 45)},  # 45 minutes old
+            existing_queue={3: ('processing', 45)},  # 45 минут назад
             processing_timeout_minutes=30,
         )
         assert result['set_to_pending'] == 1
         assert result['unchanged']      == 0
 
-    # ── Additional sync correctness tests ─────────────────────────────
+    # ── Дополнительные тесты корректности синхронизации ─────────────────────────
 
     def test_missing_queue_item_inserted_as_pending(self):
-        """No queue entry and no OpenAI poster → INSERT pending."""
+        """Нет записи в очереди и нет постера OpenAI → INSERT pending."""
         result, cursor = self._call_sync(
             film_ids=[99],
             openai_done_ids=set(),
@@ -819,7 +819,7 @@ class TestQueueSync:
         assert any('pending' in s for s in sql_calls)
 
     def test_already_done_with_openai_unchanged(self):
-        """queue='done' and has completed OpenAI poster → unchanged."""
+        """queue='done' и есть завершённый постер OpenAI → без изменений."""
         result, _ = self._call_sync(
             film_ids=[1],
             openai_done_ids={1},
@@ -829,13 +829,13 @@ class TestQueueSync:
         assert result['set_to_done'] == 0
 
     def test_mixed_batch_counts_are_correct(self):
-        """All four counters for a batch that includes a failed film."""
-        # film 1: OpenAI done + queue='done'    → unchanged
-        # film 2: OpenAI done + queue='pending' → set_to_done
-        # film 3: no OpenAI  + queue='done'    → set_to_pending (was mock)
-        # film 4: no OpenAI  + queue='pending' → unchanged
-        # film 5: no OpenAI  + not in queue    → inserted pending
-        # film 6: no OpenAI  + queue='failed'  → unchanged (leave failed)
+        """Все четыре счётчика для пакета, включающего неудачный фильм."""
+        # фильм 1: OpenAI done + queue='done'    → без изменений
+        # фильм 2: OpenAI done + queue='pending' → set_to_done
+        # фильм 3: нет OpenAI  + queue='done'    → set_to_pending (был mock)
+        # фильм 4: нет OpenAI  + queue='pending' → без изменений
+        # фильм 5: нет OpenAI  + не в очереди    → добавлен как pending
+        # фильм 6: нет OpenAI  + queue='failed'  → без изменений (оставляем failed)
         result, _ = self._call_sync(
             film_ids=[1, 2, 3, 4, 5, 6],
             openai_done_ids={1, 2},
@@ -843,24 +843,24 @@ class TestQueueSync:
                 1: 'done', 2: 'pending', 3: 'done', 4: 'pending', 6: 'failed',
             },
         )
-        assert result['unchanged']      == 3   # film 1, film 4, film 6
-        assert result['set_to_done']    == 1   # film 2
-        assert result['set_to_pending'] == 1   # film 3
-        assert result['inserted']       == 1   # film 5
+        assert result['unchanged']      == 3   # фильм 1, фильм 4, фильм 6
+        assert result['set_to_done']    == 1   # фильм 2
+        assert result['set_to_pending'] == 1   # фильм 3
+        assert result['inserted']       == 1   # фильм 5
 
     def test_empty_film_ids_returns_zeros(self):
-        """Empty input must return all zeros without touching the DB."""
+        """Пустой ввод должен возвращать все нули, не трогая БД."""
         from services.ai_posters.queue import GenerationQueue
         q      = GenerationQueue()
         result = q.sync_for_openai_generation([], set())
         assert result == {'inserted': 0, 'set_to_pending': 0, 'set_to_done': 0, 'unchanged': 0}
 
-    # ── Test 7: live batch does not auto-retry failed ─────────────────
+    # ── Тест 7: боевой batch не ретраит failed автоматически ─────────────
 
     def test_live_batch_does_not_retry_failed_items(self):
         """
-        After sync, a failed film without OpenAI poster stays failed.
-        It must NOT appear in get_pending() and must NOT be generated.
+        После синхронизации неудачный фильм без постера OpenAI остаётся failed.
+        Он НЕ должен появиться в get_pending() и НЕ должен быть сгенерирован.
         """
         from scripts.generate_movie_posters import _run_batch
 
@@ -874,11 +874,11 @@ class TestQueueSync:
         repository.openai_poster_exists.return_value = False
 
         queue = MagicMock()
-        # Sync leaves film 10 failed (unchanged), film 11 stays pending
+        # Синхронизация оставляет фильм 10 failed (без изменений), фильм 11 остаётся pending
         queue.sync_for_openai_generation.return_value = {
             'inserted': 0, 'set_to_pending': 0, 'set_to_done': 0, 'unchanged': 2,
         }
-        # get_pending only returns film 11 (film 10 is failed, not pending)
+        # get_pending возвращает только фильм 11 (фильм 10 — failed, не pending)
         queue.get_pending.side_effect = [[_make_queue_item(11, 20)], []]
         queue.get_stats.return_value = {'failed': 1, 'done': 1}
 
@@ -888,16 +888,16 @@ class TestQueueSync:
                 service=service, repository=repository, queue=queue,
             )
 
-        # film 10 was never generated
+        # фильм 10 никогда не генерировался
         for call in service.generate.call_args_list:
             assert call.kwargs['film_id'] != 10
         service.generate.assert_called_once()
         assert service.generate.call_args.kwargs['film_id'] == 11
 
-    # ── Tests 8–11: --retry-failed CLI flag ───────────────────────────
+    # ── Тесты 8–11: CLI-флаг --retry-failed ───────────────────────────
 
     def test_retry_failed_film_id_resets_only_that_film(self):
-        """--retry-failed --film-id 10 resets only film_id=10."""
+        """--retry-failed --film-id 10 сбрасывает только film_id=10."""
         from scripts.generate_movie_posters import _run_retry_failed
 
         queue = MagicMock()
@@ -911,7 +911,7 @@ class TestQueueSync:
         queue.retry_failed.assert_called_once_with(film_id=10)
 
     def test_retry_failed_all_resets_all_failed(self):
-        """--retry-failed without --film-id resets all failed items."""
+        """--retry-failed без --film-id сбрасывает все неудачные элементы."""
         from scripts.generate_movie_posters import _run_retry_failed
 
         queue = MagicMock()
@@ -926,7 +926,7 @@ class TestQueueSync:
         queue.retry_failed.assert_called_once_with()
 
     def test_retry_failed_does_not_create_openai_provider(self):
-        """--retry-failed must not instantiate OpenAIProvider."""
+        """--retry-failed не должен создавать экземпляр OpenAIProvider."""
         from scripts.generate_movie_posters import _run_retry_failed
 
         with patch('scripts.generate_movie_posters.OpenAIProvider') as mock_cls:
@@ -938,7 +938,7 @@ class TestQueueSync:
         mock_cls.assert_not_called()
 
     def test_retry_failed_does_not_call_service(self):
-        """--retry-failed must not instantiate or call PosterService."""
+        """--retry-failed не должен создавать экземпляр или вызывать PosterService."""
         from scripts.generate_movie_posters import _run_retry_failed
 
         with patch('scripts.generate_movie_posters.PosterService') as mock_cls:
@@ -949,10 +949,10 @@ class TestQueueSync:
 
         mock_cls.assert_not_called()
 
-    # ── Test 12: get_pending ordering ─────────────────────────────────
+    # ── Тест 12: порядок get_pending ─────────────────────────────────
 
     def test_get_pending_orders_by_priority_desc_film_id_asc(self):
-        """get_pending SQL must use priority DESC, film_id ASC (not created_at)."""
+        """SQL get_pending должен использовать priority DESC, film_id ASC (не created_at)."""
         from services.ai_posters.queue import GenerationQueue
 
         mock_cursor = MagicMock()
@@ -969,10 +969,10 @@ class TestQueueSync:
         assert 'film_id asc'   in sql
         assert 'created_at'    not in sql
 
-    # ── Test 13: film_id=10 stays failed after sync ───────────────────
+    # ── Тест 13: film_id=10 остаётся failed после синхронизации ───────────────
 
     def test_film_id_10_remains_failed_after_sync(self):
-        """film_id=10 with 'failed' status and no OpenAI poster must stay failed."""
+        """film_id=10 в статусе 'failed' и без постера OpenAI должен остаться failed."""
         result, _ = self._call_sync(
             film_ids=[10],
             openai_done_ids=set(),
@@ -981,7 +981,7 @@ class TestQueueSync:
         assert result['unchanged']      == 1
         assert result['set_to_pending'] == 0
 
-    # ── --sync-queue flag read-only tests (kept from previous session) ─
+    # ── read-only тесты флага --sync-queue (сохранены с прошлой сессии) ─
 
     def _run_sync_queue_with_mocks(self) -> tuple[MagicMock, MagicMock]:
         from scripts.generate_movie_posters import _run_sync_queue

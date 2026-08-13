@@ -1,30 +1,39 @@
 # Project Architecture — IT Career Hub 2
 
 > **Документ содержит два раздела:**
-> 1. **IT Career Hub 2** (текущий проект, корень репозитория) — Flask API + Firecrawl + MongoDB.
-> 2. **ITCH Films Premium** (субпроект `itch_films/`) — каталог фильмов Flask + MySQL + MongoDB + AI-постеры (OpenAI) + Firecrawl.
-> Оба раздела актуальны и активно используются. У каждого свой независимый Flask-процесс и своя точка входа (`run.py`).
+> 1. **IT Career Hub 2** (текущий проект, корень репозитория) — Flask Blueprint (`firecrawl_app/`) + Firecrawl + MongoDB.
+> 2. **ITCH Films Premium** (субпроект `itch_films/`) — каталог фильмов Flask + MySQL + MongoDB + AI-постеры (OpenAI).
+> С 2026-08-13 это **один Flask-процесс с одной точкой входа** — `itch_films/run.py`.
+> Корневой `firecrawl_app/` больше не самостоятельное приложение: он подключается как
+> blueprint внутри `itch_films/app/__init__.py`, поэтому Firecrawl-эндпоинты (`/api/scrape`,
+> `/api/crawl`, `/api/search`, `/api/history/<collection>`) и маршруты ITCH Films (`/`,
+> `/search`, `/stats`, ...) обслуживаются одним сервером на одном порту. Отдельного
+> корневого `run.py` больше нет — он удалён при слиянии.
 
 ---
 
-## IT Career Hub 2 — Текущая архитектура
+## IT Career Hub 2 / Firecrawl — Текущая архитектура
 
 **Stack:** Python 3.11+ · Flask 3.1 · MongoDB 7 · firecrawl-py 4.31 · pytest 9.1
-**Точка входа:** `python run.py` (или `flask run`)
+**Точка входа:** `python itch_films/run.py` — единственная для всего проекта (см. баннер выше)
 **Режим отладки:** управляется через `FLASK_DEBUG=true` в `.env`
 
 ### Структура файлов
 
 ```
 D:\Project_IT_Career_Hub_2\
-├── run.py                       # Точка входа. debug читается из FLASK_DEBUG env var
 ├── pytest.ini                   # Конфигурация pytest (testpaths=tests)
 ├── requirements.txt             # Production зависимости
 ├── requirements-dev.txt         # Dev зависимости (pytest)
 ├── .env                         # Секреты — НЕ коммитить
 ├── .env.example                 # Пример переменных окружения
-├── app/
-│   ├── __init__.py              # create_app() — регистрирует blueprints
+├── firecrawl_app/                # Пакет переименован из app/ 2026-08-13, чтобы не
+│   │                              # конфликтовать с itch_films/app/ (оба назывались
+│   │                              # "app" — Python не может импортировать два модуля
+│   │                              # с одинаковым именем одновременно). Сам по себе
+│   │                              # больше не запускается — только как blueprint.
+│   ├── __init__.py              # create_app() — используется тестами (tests/conftest.py)
+│   │                             # для изолированного Flask test client
 │   └── routes/
 │       ├── __init__.py          # Реэкспортирует firecrawl_bp
 │       └── firecrawl.py         # Flask Blueprint /api — scrape/crawl/search/history
@@ -40,12 +49,19 @@ D:\Project_IT_Career_Hub_2\
 ├── scripts/
 │   └── check_firecrawl.py       # Ручная проверка Firecrawl API (не тест pytest)
 ├── tests/
-│   ├── conftest.py              # Shared fixtures: app, client
+│   ├── conftest.py              # Shared fixtures: app, client (from firecrawl_app import create_app)
 │   ├── test_routes.py           # Тесты Flask маршрутов (MongoDB и Firecrawl замокированы)
 │   └── test_firecrawl_client.py # Unit-тесты FirecrawlClient (V1FirecrawlApp замокирован)
 └── archive/
     └── firecrawl_service_legacy.md  # Исторический пример первой реализации
 ```
+
+**Важно:** `firecrawl_app.create_app()` — это отдельное Flask-приложение только для
+изолированных pytest-тестов (`tests/`). В продакшене (`python itch_films/run.py`)
+Firecrawl работает не через `create_app()`, а через `firecrawl_bp`, подключённый
+напрямую в `itch_films/app/__init__.py` (см. раздел ITCH Films ниже). Маршруты и
+поведение идентичны в обоих случаях — отличается только то, какой Flask-объект
+их хостит.
 
 ### Маршруты Flask API
 
@@ -98,7 +114,10 @@ FLASK_DEBUG=false                           # true только для разр�
 
 ## ITCH Films Premium — каталог фильмов с AI-постерами (`itch_films/`)
 
-> Раздел ниже описывает субпроект в папке `itch_films/`. Его точка входа — `itch_films/run.py`, не корневой `run.py`. Обновлено 2026-08-10 под текущую AI-poster архитектуру (ветка `ai-poster-service`).
+> Раздел ниже описывает субпроект в папке `itch_films/`. **С 2026-08-13 `itch_films/run.py`
+> — единственная точка входа всего репозитория**, не только этого субпроекта: он поднимает
+> один Flask-процесс, который обслуживает и каталог фильмов, и Firecrawl API (см. баннер
+> в начале документа и структуру `app/__init__.py` ниже). Обновлено 2026-08-13.
 
 ---
 
@@ -112,11 +131,13 @@ FLASK_DEBUG=false                           # true только для разр�
 
 ```
 itch_films/
-├── run.py                   # Точка входа — запускает Flask-сервер
+├── run.py                   # Единственная точка входа всего проекта — python itch_films/run.py
 ├── local_settings.py        # Настройки подключения (MySQL read/write, MongoDB, SECRET_KEY)
 ├── requirements.txt         # Зависимости: Flask, mysql-connector-python, pymongo
 └── app/
-    ├── __init__.py          # Создаёт Flask-приложение, подключает routes
+    ├── __init__.py          # Создаёт Flask-приложение, настраивает sys.path на корень
+    │                        # проекта, грузит .env, подключает firecrawl_bp (blueprint
+    │                        # из корневого firecrawl_app/) и свои routes — в этом порядке
     ├── routes.py            # URL-маршруты: /, /search, /gallery, /stats, /api/*
     ├── mysql_connector.py   # Все SQL-запросы к Sakila (film, category, film_category)
     ├── mongo_logger.py      # Запись поисков в MongoDB
@@ -154,7 +175,10 @@ scripts/generate_movie_posters.py   # CLI: массовая генерация �
                                      # бюджетные флаги (--estimated-budget, --max-api-attempts)
 ```
 
-`routes.py` подключается к `services/ai_posters` через `sys.path.insert()` (см. TODO-комментарий в файле — временное решение, не выделенная точка инициализации).
+`services/ai_posters` (как и `firecrawl_app/`) становится импортируемым благодаря
+`sys.path.insert()` в **`app/__init__.py`** — раньше этот хак жил прямо в `routes.py`
+(отмечен там как `TODO`), 2026-08-13 перенесён в единую точку инициализации, до импорта
+любых маршрутов, как и предполагал исходный `TODO`.
 
 ---
 
@@ -250,9 +274,9 @@ log_stats.py
 
 | Файл | Слой | Задача |
 |---|---|---|
-| `run.py` | Запуск | Точка входа, `debug` читается из `FLASK_DEBUG` (по умолчанию `False`) |
+| `run.py` | Запуск | Единственная точка входа всего проекта, `debug` читается из `FLASK_DEBUG` (по умолчанию `False`) |
 | `local_settings.py` | Конфигурация | MySQL (Sakila read/write) и MongoDB credentials, SECRET_KEY — не в Git |
-| `__init__.py` | Flask | Создаёт `app`, подключает `routes` |
+| `__init__.py` | Flask | Создаёт `app`, настраивает `sys.path` на корень проекта, грузит `.env`, подключает `firecrawl_bp` и `routes` |
 | `routes.py` | Controller | Принимает HTTP-запросы, вызывает `_enrich_with_posters()` для подмешивания постеров |
 | `mysql_connector.py` | Model / MySQL | SQL-запросы к Sakila, параметризованные (`%s`) |
 | `mongo_logger.py` | Model / MongoDB | Запись логов поиска, отказоустойчивый |
@@ -341,7 +365,7 @@ length
 используется только CLI-скриптом для батчевой генерации через OpenAI. `failed` никогда
 не ретраится автоматически — только явным флагом `--retry-failed`.
 
-### Текущее состояние данных (аудит 2026-08-10, ветка `ai-poster-service`)
+### Текущее состояние данных (аудит 2026-08-10)
 
 | Метрика | Значение |
 |---|---|

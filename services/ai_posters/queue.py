@@ -63,8 +63,15 @@ class GenerationQueue:
     # ── Подключение ────────────────────────────────────────────────────
 
     def _connect(self):
+        """Подключение из того же именованного пула, что и PosterRepository
+        (одинаковый pool_name="itch_films_write" — mysql-connector-python
+        переиспользует один и тот же пул соединений для обоих классов)."""
         try:
-            return mysql.connector.connect(**local_settings.dbconfig_write)
+            return mysql.connector.connect(
+                pool_name="itch_films_write",
+                pool_size=5,
+                **local_settings.dbconfig_write,
+            )
         except mysql.connector.Error as exc:
             raise RepositoryError(
                 "Queue: cannot connect to write database.",

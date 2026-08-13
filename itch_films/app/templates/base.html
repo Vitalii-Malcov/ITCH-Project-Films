@@ -6,18 +6,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    {# Bootstrap 5 CSS через CDN.
-       CDN = Content Delivery Network — файл загружается с серверов Bootstrap,
-       нам не нужно хранить его локально. #}
+    {# Bootstrap 5 CSS — раньше грузился с CDN (cdn.jsdelivr.net), теперь
+       файл лежит локально в static/vendor/: не зависим от чужого сервера
+       и не тратим лишний DNS/TLS round-trip на сторонний домен. #}
     <link
         rel="stylesheet"
-        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}"
     >
 
-    {# Bootstrap Icons — библиотека иконок от команды Bootstrap #}
+    {# Bootstrap Icons — та же причина, файлы (CSS + шрифты) локально. #}
     <link
         rel="stylesheet"
-        href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+        href="{{ url_for('static', filename='vendor/bootstrap-icons/bootstrap-icons.min.css') }}"
     >
 
     {# Наш кастомный CSS — подключаем ПОСЛЕ Bootstrap,
@@ -75,10 +75,10 @@
         </div>
     </footer>
 
-    {# Bootstrap JS — подключаем в конце body.
+    {# Bootstrap JS — подключаем в конце body, теперь тоже локально.
        bundle.min.js включает Popper.js — нужен для выпадающих меню и tooltip'ов. #}
     <script
-        src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js">
+        src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}">
     </script>
 
     {# Слайд-шоу фона: общий для всех страниц.

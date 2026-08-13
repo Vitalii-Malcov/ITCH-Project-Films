@@ -73,9 +73,17 @@ class PosterRepository:
     # ── Подключение ────────────────────────────────────────────────────
 
     def _connect(self) -> MySQLConnection:
-        """Открывает и возвращает подключение к write-базе данных."""
+        """
+        Возвращает подключение к write-базе данных — из пула (pool_name),
+        а не новое TCP-соединение на каждый вызов. См. подробный комментарий
+        в itch_films/app/mysql_connector.py:get_connection() — тот же приём.
+        """
         try:
-            return mysql.connector.connect(**local_settings.dbconfig_write)
+            return mysql.connector.connect(
+                pool_name="itch_films_write",
+                pool_size=5,
+                **local_settings.dbconfig_write,
+            )
         except mysql.connector.Error as exc:
             raise RepositoryError(
                 "Cannot connect to write database.",

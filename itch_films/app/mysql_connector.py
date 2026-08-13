@@ -21,17 +21,29 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+from functools import lru_cache
+
 import mysql.connector   # библиотека для работы с MySQL
 import local_settings    # наши настройки подключения (itch_films/local_settings.py)
 
 
 def get_connection():
-    """Создаёт и возвращает подключение к базе данных Sakila (чтение)."""
-    # **local_settings.dbconfig "распаковывает" словарь в аргументы функции.
-    # Это то же самое что написать:
-    #   host="ich-db...", user="ich1", password="...", database="sakila"
-    # Но короче и удобнее — настройки хранятся в одном месте.
-    connection = mysql.connector.connect(**local_settings.dbconfig)
+    """
+    Возвращает подключение к базе данных Sakila (чтение) — из пула.
+
+    Без pool_name/pool_size каждый вызов get_connection() открывал бы
+    НОВОЕ TCP-подключение к удалённому серверу ich-db.edu.itcareerhub.de
+    (полный handshake: TCP + аутентификация MySQL — заметная задержка
+    на каждый запрос). С pool_name mysql-connector-python сам держит
+    пул из pool_size уже открытых соединений: connection.close() ниже
+    по коду не закрывает TCP-сокет, а возвращает соединение в пул для
+    переиспользования следующим запросом.
+    """
+    connection = mysql.connector.connect(
+        pool_name="itch_films_read",
+        pool_size=5,
+        **local_settings.dbconfig,
+    )
     return connection
 
 
@@ -83,6 +95,7 @@ def test_connection():
         print("=" * 45)
 
 
+@lru_cache(maxsize=1)
 def get_all_genres():
     """
     Возвращает список всех жанров из таблицы category.
@@ -90,6 +103,12 @@ def get_all_genres():
 
     Возвращает список словарей:
     [{"id": 1, "name": "Action"}, {"id": 2, "name": "Comedy"}, ...]
+
+    @lru_cache(maxsize=1) — Sakila подключена в режиме "только чтение" и
+    список жанров практически никогда не меняется, а эта функция раньше
+    вызывалась (и открывала соединение с БД) на КАЖДОЙ загрузке главной
+    страницы и КАЖДОМ поиске. Кэш считает результат один раз за время
+    работы процесса и дальше отдаёт его мгновенно, без похода в MySQL.
     """
     conn   = get_connection()
     cursor = conn.cursor()
@@ -107,6 +126,7 @@ def get_all_genres():
     return genres
 
 
+@lru_cache(maxsize=1)
 def get_year_range():
     """
     Возвращает минимальный и максимальный год выпуска фильмов.
@@ -114,6 +134,9 @@ def get_year_range():
 
     Возвращает словарь:
     {"min_year": 2006, "max_year": 2006}
+
+    @lru_cache(maxsize=1) — та же причина, что у get_all_genres(): данные
+    статичны, кэшируем на всё время работы процесса.
     """
     conn   = get_connection()
     cursor = conn.cursor()

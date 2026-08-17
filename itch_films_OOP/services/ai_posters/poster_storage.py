@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 _EXTENSION = '.webp'
 _DIGITS = 6  # 000001.webp … 999999.webp
+_MAX_SAVE_ATTEMPTS = 20  # запасной предел на случай гонки при выборе имени
 
 
 class PosterStorage:
@@ -54,20 +55,39 @@ class PosterStorage:
             Имя файла, например '000001.webp'.
 
         Исключения:
-            StorageError: если файл не удалось записать.
+            StorageError: если файл не удалось записать после
+            _MAX_SAVE_ATTEMPTS попыток.
+
+        Про атомарность: _next_filename() сканирует диск и предлагает
+        "следующий" номер — если это делают два вызова save() почти
+        одновременно (например, /api/poster/regenerate и batch-скрипт),
+        оба могут посчитать один и тот же номер. Раньше запись шла через
+        open(path, 'wb'), который тихо перезаписывает уже существующий
+        файл — один из двух постеров молча пропадал, а обе записи БД
+        указывали на один файл. 'xb' (эксклюзивное создание) вместо этого
+        падает с FileExistsError, если имя уже занято — тогда просто
+        пробуем следующий номер, а не перезаписываем чужой файл.
         """
-        filename = self._next_filename()
-        path = self.get_path(filename)
-        try:
-            with open(path, 'wb') as fh:
-                fh.write(image_bytes)
-        except OSError as exc:
-            raise StorageError(
-                f"Could not write poster file: {path}",
-                details=str(exc),
-            ) from exc
-        logger.info(f"Сохранён постер: {filename} ({len(image_bytes):,} байт)")
-        return filename
+        for _ in range(_MAX_SAVE_ATTEMPTS):
+            filename = self._next_filename()
+            path = self.get_path(filename)
+            try:
+                with open(path, 'xb') as fh:
+                    fh.write(image_bytes)
+            except FileExistsError:
+                continue
+            except OSError as exc:
+                raise StorageError(
+                    f"Could not write poster file: {path}",
+                    details=str(exc),
+                ) from exc
+            logger.info(f"Сохранён постер: {filename} ({len(image_bytes):,} байт)")
+            return filename
+
+        raise StorageError(
+            f"Could not allocate a unique poster filename after "
+            f"{_MAX_SAVE_ATTEMPTS} attempts (directory: {self._dir})."
+        )
 
     def get_path(self, filename: str) -> str:
         """Возвращает абсолютный путь для заданного имени файла."""

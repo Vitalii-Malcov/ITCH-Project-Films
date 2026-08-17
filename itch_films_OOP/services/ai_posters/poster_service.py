@@ -24,6 +24,7 @@ PosterService — оркестрирует полный конвейер ген�
     - Не знает про Flask или HTTP.
 """
 
+import os
 import time
 import logging
 
@@ -129,20 +130,37 @@ class PosterService:
         image_path = self._storage.get_path(filename)
 
         # 5. Сохранить запись в БД
-        poster_id = self._repository.save(
-            film_id=film_id,
-            provider=self._provider.provider_name(),
-            model=self._provider.model_name(),
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            style=style if style != 'auto' else f"auto:{genre.lower()}",
-            seed=seed,
-            width=width,
-            height=height,
-            image_path=image_path,
-            status='completed',
-            generation_time=generation_time,
-        )
+        try:
+            poster_id = self._repository.save(
+                film_id=film_id,
+                provider=self._provider.provider_name(),
+                model=self._provider.model_name(),
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                style=style if style != 'auto' else f"auto:{genre.lower()}",
+                seed=seed,
+                width=width,
+                height=height,
+                image_path=image_path,
+                status='completed',
+                generation_time=generation_time,
+            )
+        except Exception:
+            # Файл уже записан на диск (шаг 4), но без строки в БД он
+            # становится "сиротой" — ничто на него больше не ссылается,
+            # и он никогда не попадёт под MAX(id)/status='completed' в
+            # PosterRepository. Раньше такой файл просто оставался в
+            # storage/posters/ навсегда; при повторяющихся сбоях БД это
+            # медленно, но верно забивало диск. Удаляем сразу же.
+            logger.exception(
+                f"Запись в БД не удалась для film_id={film_id} — "
+                f"удаляю осиротевший файл {filename}"
+            )
+            try:
+                os.remove(image_path)
+            except OSError:
+                logger.warning(f"Не удалось удалить осиротевший файл {image_path}")
+            raise
 
         logger.info(
             f"Постер сохранён: poster_id={poster_id} "

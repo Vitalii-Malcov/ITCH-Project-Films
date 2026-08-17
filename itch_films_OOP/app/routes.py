@@ -41,6 +41,7 @@ from app.services import (
     SearchStatsRepository,
     FilmNewsService,
     PosterEnricher,
+    RateLimiter,
 )
 from services.ai_posters import PosterRepository
 
@@ -63,6 +64,22 @@ DEFAULT_POSTER = '/static/images/placeholder_movie.png'
 # Допустимый диапазон годов для формы поиска "жанр + годы".
 YEAR_MIN = 1990
 YEAR_MAX = 2026
+
+# Максимальная длина названия фильма для /api/film/news — Firecrawl это
+# платный внешний API, без ограничения запрос можно было слать сколь
+# угодно длинной строкой (лишние расходы, не влияя на качество поиска).
+FILM_NEWS_TITLE_MAX_LENGTH = 200
+
+# Rate limit для "дорогих" эндпоинтов без аутентификации:
+#   /api/film/news         — платный вызов Firecrawl на каждый запрос;
+#   /api/poster/regenerate — пишет файл на диск + строку в movie_posters
+#                             на каждый запрос.
+# У проекта нет системы логина/пользователей (курсовой проект без
+# авторизации) — полноценная auth здесь была бы избыточна. Rate limit —
+# минимальная защита от одного клиента, заваливающего эндпоинт запросами
+# (случайно или намеренно) и раздувающего расходы/диск/таблицу БД.
+film_news_limiter        = RateLimiter(max_requests=10, window_seconds=60)
+poster_regenerate_limiter = RateLimiter(max_requests=5, window_seconds=60)
 
 
 # ── Сборка объектов сервисного слоя (композиция) ────────────────────
@@ -249,9 +266,14 @@ def suggest():
 @app.route("/api/film/news")
 def film_news():
     """GET /api/film/news?title=<название> — информация о фильме через Firecrawl."""
+    if not film_news_limiter.allow(request.remote_addr or "unknown"):
+        return jsonify({"error": "Слишком много запросов, попробуйте позже."}), 429
+
     title = request.args.get("title", "").strip()
     if not title:
         return jsonify({"error": "Не указано название фильма"}), 400
+    if len(title) > FILM_NEWS_TITLE_MAX_LENGTH:
+        return jsonify({"error": "Слишком длинное название фильма"}), 400
 
     results = film_news_service.get_film_news(title)
     return jsonify({"title": title, "results": results})
@@ -299,6 +321,9 @@ def api_poster_regenerate():
     Генерирует новый постер для одного фильма вне очереди.
     Всегда создаёт новую запись в movie_posters (намеренная регенерация).
     """
+    if not poster_regenerate_limiter.allow(request.remote_addr or "unknown"):
+        return jsonify({"error": "Слишком много запросов, попробуйте позже."}), 429
+
     data    = request.get_json(silent=True) or {}
     film_id = data.get("film_id")
 

@@ -48,15 +48,38 @@ import local_settings  # noqa: E402
 
 _CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS movie_generation_queue (
-    id         INT AUTO_INCREMENT PRIMARY KEY,
-    film_id    INT NOT NULL UNIQUE,
-    priority   INT          DEFAULT 5,
-    status     VARCHAR(50)  DEFAULT 'pending',
-    tries      INT          DEFAULT 0,
-    created_at TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    id                     INT AUTO_INCREMENT PRIMARY KEY,
+    film_id                INT NOT NULL UNIQUE,
+    priority               INT          DEFAULT 5,
+    status                 VARCHAR(50)  DEFAULT 'pending',
+    tries                  INT          DEFAULT 0,
+    created_at             TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    processing_started_at  TIMESTAMP    NULL,
+    claim_token            INT          NOT NULL DEFAULT 0,
     INDEX idx_status   (status),
     INDEX idx_priority (priority)
 )
+"""
+
+# Для таблицы, созданной ДО появления этих колонок (эта база — общая
+# с itch_films/, CREATE TABLE IF NOT EXISTS её не тронет) — добавляем
+# колонки отдельным ALTER, если их ещё нет. MySQL 8.0.29+.
+_ADD_PROCESSING_STARTED_AT_SQL = """
+ALTER TABLE movie_generation_queue
+ADD COLUMN IF NOT EXISTS processing_started_at TIMESTAMP NULL
+"""
+
+# claim_token — «fencing token»: увеличивается на 1 при каждом успешном
+# захвате элемента через mark_processing(). mark_done()/mark_failed()
+# принимают token, полученный при захвате, и применяют изменение, только
+# если он всё ещё совпадает с текущим значением в БД. Без этого: если
+# элемент по таймауту сброшен в pending и захвачен ЗАНОВО (другим
+# запуском), а «старый» воркер после этого всё-таки достучится до API и
+# вызовет mark_done()/mark_failed() — он тихо перезапишет статус нового,
+# ещё выполняющегося захвата.
+_ADD_CLAIM_TOKEN_SQL = """
+ALTER TABLE movie_generation_queue
+ADD COLUMN IF NOT EXISTS claim_token INT NOT NULL DEFAULT 0
 """
 
 
@@ -84,11 +107,18 @@ class GenerationQueue:
     # ── DDL ───────────────────────────────────────────────────────────
 
     def create_table(self) -> None:
-        """Создаёт таблицу movie_generation_queue, если она не существует."""
+        """
+        Создаёт таблицу movie_generation_queue, если она не существует,
+        и доводит схему существующей таблицы до актуальной (добавляет
+        processing_started_at и claim_token, если их ещё нет — см.
+        комментарии у _ADD_PROCESSING_STARTED_AT_SQL / _ADD_CLAIM_TOKEN_SQL выше).
+        """
         conn = self._connect()
         cursor = conn.cursor()
         try:
             cursor.execute(_CREATE_TABLE_SQL)
+            cursor.execute(_ADD_PROCESSING_STARTED_AT_SQL)
+            cursor.execute(_ADD_CLAIM_TOKEN_SQL)
             conn.commit()
             logger.info("Таблица movie_generation_queue готова.")
         except mysql.connector.Error as exc:
@@ -161,34 +191,124 @@ class GenerationQueue:
             cursor.close()
             conn.close()
 
-    def mark_processing(self, queue_id: int) -> None:
-        """Помечает элемент очереди как находящийся в обработке."""
-        self._update_status(queue_id, 'processing')
+    def mark_processing(self, queue_id: int) -> int | None:
+        """
+        Пытается атомарно захватить элемент очереди для обработки.
 
-    def mark_done(self, queue_id: int) -> None:
-        """Помечает элемент очереди как успешно завершённый."""
-        self._update_status(queue_id, 'done')
+        Условие `AND status = 'pending'` в UPDATE — это и есть захват:
+        если два процесса (например, два одновременных запуска скрипта)
+        оба вызовут get_pending() и получат один и тот же элемент, только
+        один из вызовов mark_processing() реально изменит строку (affected
+        rows = 1); второй увидит status уже НЕ 'pending' и получит affected
+        rows = 0 → None. Раньше это был безусловный UPDATE ... WHERE id = %s —
+        оба процесса "успешно" помечали один и тот же элемент и оба
+        генерировали постер повторно.
 
-    def mark_failed(self, queue_id: int) -> None:
-        """Помечает элемент очереди как неудачный и увеличивает счётчик tries."""
+        Заодно проставляет processing_started_at — момент реального начала
+        обработки, а не момент постановки в очередь (created_at) — и
+        увеличивает claim_token ("fencing token", см. комментарий у
+        _ADD_CLAIM_TOKEN_SQL). Вызывающий код обязан передать возвращённый
+        token в последующие mark_done()/mark_failed() — иначе результат
+        УЖЕ неактуального захвата (например, воркер, застрявший дольше
+        processing_timeout_minutes и перезахваченный заново) может
+        перезаписать статус нового, ещё выполняющегося захвата.
+
+        Возвращает claim_token (int), если элемент реально захвачен,
+        None — если его уже забрал кто-то другой (нужно пропустить).
+        """
         conn = self._connect()
-        cursor = conn.cursor()
+        cursor = None
         try:
+            cursor = conn.cursor()
             cursor.execute(
                 "UPDATE movie_generation_queue "
-                "SET status = 'failed', tries = tries + 1 "
-                "WHERE id = %s",
+                "SET status = 'processing', processing_started_at = NOW(), "
+                "    claim_token = claim_token + 1 "
+                "WHERE id = %s AND status = 'pending'",
                 (queue_id,),
             )
+            if cursor.rowcount == 0:
+                conn.commit()
+                logger.warning(
+                    f"Элемент очереди id={queue_id} уже забран другим процессом — пропускаем"
+                )
+                return None
+
+            cursor.execute(
+                "SELECT claim_token FROM movie_generation_queue WHERE id = %s",
+                (queue_id,),
+            )
+            row = cursor.fetchone()
             conn.commit()
-            logger.warning(f"Элемент очереди id={queue_id} помечен как failed.")
+            token = row[0] if row else None
+            logger.debug(
+                f"Элемент очереди id={queue_id} → processing (захвачен, claim_token={token})"
+            )
+            return token
+        except mysql.connector.Error as exc:
+            raise RepositoryError(
+                f"Queue: failed to claim item {queue_id} for processing.",
+                details=str(exc),
+            ) from exc
+        finally:
+            if cursor is not None:
+                cursor.close()
+            conn.close()
+
+    def mark_done(self, queue_id: int, claim_token: int | None = None) -> None:
+        """
+        Помечает элемент очереди как успешно завершённый.
+
+        claim_token: значение, полученное от mark_processing() при захвате
+        этого элемента. Если передано — обновление применяется, только
+        если claim_token в БД всё ещё совпадает (fencing token, см.
+        mark_processing()); устаревший результат молча игнорируется
+        (с предупреждением в лог), а не перезаписывает статус нового
+        захвата. Если не передано — обновление безусловное (для элементов,
+        которые никогда не проходили через mark_processing(), например
+        film_id отсутствует в Sakila — см. вызовы в generate_movie_posters.py).
+        """
+        self._update_status(queue_id, 'done', claim_token)
+
+    def mark_failed(self, queue_id: int, claim_token: int | None = None) -> None:
+        """
+        Помечает элемент очереди как неудачный и увеличивает счётчик tries.
+        claim_token — см. docstring mark_done().
+        """
+        conn = self._connect()
+        cursor = None
+        try:
+            cursor = conn.cursor()
+            if claim_token is None:
+                cursor.execute(
+                    "UPDATE movie_generation_queue "
+                    "SET status = 'failed', tries = tries + 1 "
+                    "WHERE id = %s",
+                    (queue_id,),
+                )
+            else:
+                cursor.execute(
+                    "UPDATE movie_generation_queue "
+                    "SET status = 'failed', tries = tries + 1 "
+                    "WHERE id = %s AND claim_token = %s",
+                    (queue_id, claim_token),
+                )
+            conn.commit()
+            if cursor.rowcount:
+                logger.warning(f"Элемент очереди id={queue_id} помечен как failed.")
+            elif claim_token is not None:
+                logger.warning(
+                    f"Элемент очереди id={queue_id}: устаревший claim_token={claim_token} — "
+                    f"переход в failed проигнорирован (элемент уже перезахвачен заново)."
+                )
         except mysql.connector.Error as exc:
             raise RepositoryError(
                 f"Queue: failed to mark item {queue_id} as failed.",
                 details=str(exc),
             ) from exc
         finally:
-            cursor.close()
+            if cursor is not None:
+                cursor.close()
             conn.close()
 
     # ── Чтение ──────────────────────────────────────────────────────────
@@ -282,10 +402,20 @@ class GenerationQueue:
         cursor = conn.cursor(dictionary=True)
         try:
             # Получаем текущее состояние очереди плюс возраст для определения зависших задач
+            # COALESCE(processing_started_at, created_at): для 'processing'-
+            # элементов возраст считаем от момента реального захвата
+            # (processing_started_at), а не от постановки в очередь —
+            # иначе элемент, долго прождавший в pending, немедленно
+            # считался бы "зависшим" сразу после начала обработки.
+            # created_at остаётся fallback для элементов НЕ в processing
+            # (у них processing_started_at всегда NULL) — им конкретное
+            # значение age_minutes здесь не важно, оно используется только
+            # в ветке status == 'processing' ниже.
             placeholders = ', '.join(['%s'] * len(all_film_ids))
             cursor.execute(
                 f"SELECT film_id, status, "
-                f"TIMESTAMPDIFF(MINUTE, created_at, NOW()) AS age_minutes "
+                f"TIMESTAMPDIFF(MINUTE, COALESCE(processing_started_at, created_at), NOW()) "
+                f"AS age_minutes "
                 f"FROM movie_generation_queue "
                 f"WHERE film_id IN ({placeholders})",
                 all_film_ids,
@@ -439,21 +569,38 @@ class GenerationQueue:
 
     # ── Приватный вспомогательный метод ────────────────────────────────────
 
-    def _update_status(self, queue_id: int, status: str) -> None:
+    def _update_status(
+        self, queue_id: int, status: str, claim_token: int | None = None
+    ) -> None:
         conn = self._connect()
-        cursor = conn.cursor()
+        cursor = None
         try:
-            cursor.execute(
-                "UPDATE movie_generation_queue SET status = %s WHERE id = %s",
-                (status, queue_id),
-            )
+            cursor = conn.cursor()
+            if claim_token is None:
+                cursor.execute(
+                    "UPDATE movie_generation_queue SET status = %s WHERE id = %s",
+                    (status, queue_id),
+                )
+            else:
+                cursor.execute(
+                    "UPDATE movie_generation_queue SET status = %s "
+                    "WHERE id = %s AND claim_token = %s",
+                    (status, queue_id, claim_token),
+                )
             conn.commit()
-            logger.debug(f"Элемент очереди id={queue_id} → {status}")
+            if cursor.rowcount:
+                logger.debug(f"Элемент очереди id={queue_id} → {status}")
+            elif claim_token is not None:
+                logger.warning(
+                    f"Элемент очереди id={queue_id}: устаревший claim_token={claim_token} — "
+                    f"переход в {status} проигнорирован (элемент уже перезахвачен заново)."
+                )
         except mysql.connector.Error as exc:
             raise RepositoryError(
                 f"Queue: failed to set status={status} for id={queue_id}.",
                 details=str(exc),
             ) from exc
         finally:
-            cursor.close()
+            if cursor is not None:
+                cursor.close()
             conn.close()

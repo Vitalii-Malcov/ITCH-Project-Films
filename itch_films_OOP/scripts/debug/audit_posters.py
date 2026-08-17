@@ -42,7 +42,7 @@ multi_provider = cur.fetchall()
 print("film_ids with multiple distinct providers:", len(multi_provider))
 print("  sample:", multi_provider[:10])
 
-# exact full-row duplicates (same film_id, provider, prompt, image_path)
+# exact full-row duplicates (same film_id, provider, image_path)
 cur.execute("""
     SELECT film_id, provider, image_path, COUNT(*) AS n
     FROM movie_posters

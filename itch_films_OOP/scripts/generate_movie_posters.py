@@ -744,7 +744,13 @@ def _run_batch(
 
             desc, is_fallback = _build_description(film)
 
-            queue.mark_processing(queue_id)
+            claim_token = queue.mark_processing(queue_id)
+            if claim_token is None:
+                # Элемент уже забрал другой процесс (например, второй
+                # параллельный запуск скрипта) — пропускаем, не считая
+                # это попыткой API.
+                continue
+
             start = time.monotonic()
             api_attempts += 1   # увеличиваем здесь — считаем этот реальный вызов OpenAI API
             try:
@@ -757,7 +763,7 @@ def _run_batch(
                     description=desc,
                 )
                 elapsed = round(time.monotonic() - start, 1)
-                queue.mark_done(queue_id)
+                queue.mark_done(queue_id, claim_token)
                 generated += 1
                 url  = service.get_poster_url(film_id) or '(нет url)'
                 note = ' [fallback-desc]' if is_fallback else ''
@@ -785,7 +791,7 @@ def _run_batch(
                     print()
 
             except Exception as exc:
-                queue.mark_failed(queue_id)
+                queue.mark_failed(queue_id, claim_token)
                 failed += 1
                 print(
                     f"  [FAILED   ] [{film_id:>4}] "

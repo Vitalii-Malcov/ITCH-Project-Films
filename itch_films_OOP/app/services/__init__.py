@@ -12,6 +12,7 @@ from app.services.search_logger import SearchLogger
 from app.services.search_stats import SearchStatsRepository
 from app.services.film_news_service import FilmNewsService
 from app.services.poster_enricher import PosterEnricher
+from app.services.rate_limiter import RateLimiter
 
 __all__ = [
     "MongoConnection",
@@ -19,4 +20,5 @@ __all__ = [
     "SearchStatsRepository",
     "FilmNewsService",
     "PosterEnricher",
+    "RateLimiter",
 ]

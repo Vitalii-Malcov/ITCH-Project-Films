@@ -413,7 +413,11 @@ class TestRunBatch:
             generate_side_effect=Exception("API error"),
         )
 
-        queue.mark_failed.assert_called_with(10)
+        # Второй аргумент — claim_token, полученный от mark_processing()
+        # (в этом тесте — сам объект-заглушка mock, конкретное значение
+        # не важно; важно, что mark_failed вызван для правильного queue_id).
+        queue.mark_failed.assert_called_once()
+        assert queue.mark_failed.call_args[0][0] == 10
 
     # ── логика пропуска ─────────────────────────────────────────────────
 
@@ -510,6 +514,7 @@ class TestRunBatch:
 
         def _mark_proc(qid):
             call_order.append('mark_processing')
+            return 1  # claim_token
         def _generate(**kw):
             call_order.append('generate')
             return 1
@@ -540,6 +545,39 @@ class TestRunBatch:
 
         queue.mark_failed.assert_called_with(50)
         service.generate.assert_not_called()
+
+    def test_lost_claim_skips_generation_without_counting_attempt(self):
+        """
+        Если mark_processing() вернул None (элемент уже забрал другой
+        процесс — атомарный захват не удался), генерация должна быть
+        пропущена и попытка API не должна засчитываться.
+        """
+        films   = [_make_film(1)]
+        pending = [[_make_queue_item(1, 10)]]
+
+        from scripts.generate_movie_posters import _run_batch
+
+        service    = self._make_service()
+        repository = MagicMock()
+        repository.get_openai_completed_film_ids.return_value = set()
+        repository.openai_poster_exists.return_value = False
+        queue = MagicMock()
+        queue.get_pending.side_effect = [pending[0], []]
+        queue.get_stats.return_value = {}
+        queue.mark_processing.return_value = None
+
+        with patch('scripts.generate_movie_posters._fetch_films', return_value=films):
+            with patch('scripts.generate_movie_posters._reset_stuck_processing', return_value=0):
+                _run_batch(
+                    self._make_args(limit=1),
+                    service=service,
+                    repository=repository,
+                    queue=queue,
+                )
+
+        service.generate.assert_not_called()
+        queue.mark_done.assert_not_called()
+        queue.mark_failed.assert_not_called()
 
 
 # ── 7. Контракт --dry-run: должен быть полностью read-only ────────────────────

@@ -12,9 +12,13 @@ MockProvider — заглушка для разработки, реализую�
     Pillow кодирует изображение одной строкой и создаёт настоящий WebP-файл,
     который браузеры и Flask могут отдавать напрямую.
 
-Заменить на настоящего провайдера, когда будет готов:
-    class OpenAIProvider(AIImageProvider): ...
-    service = PosterService(provider=OpenAIProvider(...), ...)
+Настоящий провайдер уже существует — см. providers/openai_provider.py
+(class OpenAIProvider(AIImageProvider)), используется batch-скриптом
+scripts/generate_movie_posters.py. MockProvider остаётся отдельным
+классом для разработки, тестов и /api/poster/regenerate (не тратит
+вызовы платного OpenAI API) — выбор провайдера — это Strategy pattern
+(см. AIImageProvider в base.py): PosterService принимает любой из них
+через конструктор, не зная, какой именно активен.
 """
 
 import io

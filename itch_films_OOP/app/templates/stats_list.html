@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}ITCH Films — {{ title }}{% endblock %}
+
+
+{% block content %}
+
+{# ── Страница детального списка MongoDB ─────────────────────────── #}
+{# Переменные из routes.py:
+   items     — список документов текущей страницы (до 10)
+   total     — общее число записей (для пагинации)
+   offset    — сколько записей пропущено (текущая позиция)
+   list_type — "searches" или "unique" (определяет колонки)
+   title     — заголовок страницы #}
+
+<section class="page-content py-5">
+    <div class="container">
+
+        {# ── Шапка: назад + заголовок + счётчик ─────────────────── #}
+        <div class="d-flex align-items-center gap-3 mb-4 flex-wrap">
+            <a href="{{ url_for('stats') }}" class="stats-back-link">
+                <i class="bi bi-arrow-left me-1"></i>Статистика
+            </a>
+            <h1 class="mb-0 fs-3">{{ title }}</h1>
+            <span class="stats-db-badge ms-auto">
+                {{ total }} записей
+            </span>
+        </div>
+
+        {# ── Таблица результатов в glass-панели ──────────────────── #}
+        <div class="results-panel">
+
+            {% if items %}
+
+                <table class="stats-table w-100">
+
+                    {% if list_type == "searches" %}
+                    {# ── Все поиски: запрос, тип, дата, результаты ── #}
+                    <thead>
+                        <tr>
+                            <th>Запрос</th>
+                            <th class="d-none d-sm-table-cell">Тип</th>
+                            <th class="d-none d-md-table-cell">Дата</th>
+                            <th class="text-end">Результатов</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in items %}
+                        <tr>
+                            <td class="stats-query-cell">
+                                {{ item.search_value or "—" }}
+                            </td>
+                            <td class="d-none d-sm-table-cell">
+                                {% if item.search_type == "title" %}
+                                <span class="badge recent-type-badge recent-badge-title">
+                                    🔎 Search
+                                </span>
+                                {% elif item.search_type == "genre" %}
+                                <span class="badge recent-type-badge recent-badge-genre">
+                                    🎭 Genre
+                                </span>
+                                {% else %}
+                                <span class="text-secondary">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="d-none d-md-table-cell text-secondary small">
+                                {{ item.timestamp.strftime("%d.%m.%Y %H:%M") }}
+                            </td>
+                            <td class="text-end">
+                                {% if item.results_count %}
+                                <span class="recent-results">{{ item.results_count }}</span>
+                                {% else %}
+                                <span class="text-secondary">0</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+
+                    {% elif list_type == "unique" %}
+                    {# ── Уникальные запросы: запрос, кол-во, дата ── #}
+                    <thead>
+                        <tr>
+                            <th>Запрос</th>
+                            <th class="text-center">Раз искали</th>
+                            <th class="d-none d-md-table-cell text-end">Последний раз</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in items %}
+                        <tr>
+                            <td class="stats-query-cell">{{ item._id or "—" }}</td>
+                            <td class="text-center">
+                                <span class="popular-count">× {{ item.count }}</span>
+                            </td>
+                            <td class="d-none d-md-table-cell text-end text-secondary small">
+                                {{ item.last_seen.strftime("%d.%m.%Y %H:%M") }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    {% endif %}
+
+                </table>
+
+                {# ── Пагинация ────────────────────────────────────── #}
+                {# Показываем блок если есть хоть одна кнопка.
+                   «Следующие 10»: если на странице ровно 10 записей
+                   и offset + 10 < total — значит, есть ещё. #}
+                {% if offset > 0 or (offset + items|length) < total %}
+                <div class="pagination-nav mt-3">
+
+                    {% if offset > 0 %}
+                    {% set prev_offset = (offset - 10) if offset >= 10 else 0 %}
+                    <a href="{{ url_for(request.endpoint, offset=prev_offset) }}"
+                       class="btn pagination-btn">
+                        <i class="bi bi-chevron-left me-1"></i>Предыдущие 10
+                    </a>
+                    {% endif %}
+
+                    {% if (offset + items|length) < total %}
+                    <a href="{{ url_for(request.endpoint, offset=offset + 10) }}"
+                       class="btn pagination-btn ms-auto">
+                        Следующие 10<i class="bi bi-chevron-right ms-1"></i>
+                    </a>
+                    {% endif %}
+
+                </div>
+                {% endif %}
+
+            {% else %}
+
+                {# MongoDB недоступна или коллекция пуста #}
+                <div class="text-center py-4 text-secondary">
+                    <i class="bi bi-inbox fs-2 d-block mb-2 opacity-50"></i>
+                    Нет данных
+                </div>
+
+            {% endif %}
+
+        </div>{# end results-panel #}
+
+    </div>
+</section>
+
+{% endblock %}

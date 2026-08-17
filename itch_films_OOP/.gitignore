@@ -1,0 +1,9 @@
+../.venv/
+__pycache__/
+.idea/
+
+local_settings.py
+
+*.pyc
+*.log
+flask_out.txt

@@ -1,0 +1,380 @@
+# ─────────────────────────────────────────────
+# app/routes.py
+# Все маршруты (URL-адреса) приложения.
+#
+# ООП-версия: view-функции Flask остаются функциями (это стандартный
+# способ объявлять маршруты в Flask — @app.route декорирует функцию),
+# но внутри они не открывают соединения и не пишут SQL сами — они
+# вызывают методы уже готовых объектов: film_repository, search_logger,
+# search_stats, film_news_service, poster_enricher. Все эти объекты
+# создаются один раз ниже (после импортов) и переиспользуются на
+# каждый запрос — как и было в процедурной версии с module-level
+# переменными, только теперь состояние явно принадлежит объектам.
+# ─────────────────────────────────────────────
+
+import logging
+import os
+import sys
+
+# Этот файл предназначен для импорта через run.py → app/__init__.py,
+# а не для прямого запуска. Но если его всё же запустят напрямую
+# (`python app/routes.py`) — Python подставляет папку ЭТОГО файла
+# (app/) в начало sys.path, а не корень проекта. Если в PYTHONPATH
+# уже был путь к соседнему проекту (itch_films/, itch_films_2/) —
+# у него тоже есть свой пакет `app`, и Python может по ошибке
+# импортировать ЕГО вместо нашего. Вставляем свой корень первым —
+# так `from app import app` ниже гарантированно найдёт именно
+# itch_films_OOP/app/, а не чужой одноимённый пакет.
+_project_root: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _project_root in sys.path:
+    sys.path.remove(_project_root)
+sys.path.insert(0, _project_root)
+
+from flask import render_template, request, jsonify, send_from_directory
+from app import app
+import local_settings
+
+from app.repositories import FilmRepository
+from app.services import (
+    MongoConnection,
+    SearchLogger,
+    SearchStatsRepository,
+    FilmNewsService,
+    PosterEnricher,
+)
+from services.ai_posters import PosterRepository
+
+logger = logging.getLogger(__name__)
+
+# Пути относительно этого файла (itch_films_OOP/app/routes.py)
+# dirname x1 → itch_films_OOP/app/
+# dirname x2 → itch_films_OOP/  (корень проекта ITCH Films)
+_this_dir: str   = os.path.dirname(os.path.abspath(__file__))
+_itch_films: str = os.path.normpath(os.path.join(_this_dir, '..'))
+POSTERS_DIR: str = os.path.join(_itch_films, 'storage', 'posters')
+
+# sys.path на корень itch_films_OOP/ уже настроен выше (строки 19-31) и
+# ещё раз — в app/__init__.py до импорта этого файла (при обычном запуске
+# через run.py оба раза указывают на один и тот же путь, повтор безвреден).
+
+# Запасное изображение, если постер не найден в таблице movie_posters.
+DEFAULT_POSTER = '/static/images/placeholder_movie.png'
+
+# Допустимый диапазон годов для формы поиска "жанр + годы".
+YEAR_MIN = 1990
+YEAR_MAX = 2026
+
+
+# ── Сборка объектов сервисного слоя (композиция) ────────────────────
+# Создаются один раз при импорте модуля — так же, как раньше
+# module-level singleton'ы в mongo_logger.py/film_news.py, только
+# теперь это явные объекты, а не спрятанное состояние модуля.
+
+film_repository = FilmRepository()
+
+# Одна и та же MongoDB-коллекция, но два подключения — как и было
+# в процедурной версии (mongo_logger.py и log_stats.py каждый держали
+# своё соединение). label разный, чтобы в терминале было видно, какое
+# именно подключение (запись логов или чтение статистики) недоступно.
+_write_connection = MongoConnection(
+    local_settings.MONGO_URI, local_settings.MONGO_DATABASE,
+    local_settings.MONGO_COLLECTION, label="MongoDB",
+)
+_read_connection = MongoConnection(
+    local_settings.MONGO_URI, local_settings.MONGO_DATABASE,
+    local_settings.MONGO_COLLECTION, label="MongoDB Stats",
+)
+
+search_logger      = SearchLogger(_write_connection)
+search_stats        = SearchStatsRepository(_read_connection)
+film_news_service   = FilmNewsService()
+# PosterRepository передаётся явно (а не создаётся внутри PosterEnricher) —
+# тот же принцип dependency injection, что и у остальных сервисов выше.
+poster_enricher     = PosterEnricher(DEFAULT_POSTER, poster_repository=PosterRepository())
+
+
+def _parse_year(value: str):
+    """
+    Проверяет строку года из формы поиска.
+
+    Пустая строка — год не указан, фильтр по нему не применяется (это не ошибка).
+    Иначе строка должна быть целым числом в диапазоне [YEAR_MIN, YEAR_MAX].
+
+    Возвращает (год: int | None, текст_ошибки: str | None).
+    """
+    if not value:
+        return None, None
+    try:
+        year = int(value)
+    except ValueError:
+        return None, f"Год должен быть числом от {YEAR_MIN} до {YEAR_MAX}."
+    if year < YEAR_MIN or year > YEAR_MAX:
+        return None, f"Год должен быть в диапазоне от {YEAR_MIN} до {YEAR_MAX}."
+    return year, None
+
+
+@app.route("/posters/<filename>")
+def serve_poster(filename):
+    """Отдаёт AI-сгенерированные файлы постеров из storage/posters/."""
+    return send_from_directory(POSTERS_DIR, filename)
+
+
+def _get_search_form_context() -> tuple[list[dict], dict]:
+    """
+    Возвращает (genres, year_range) для формы поиска на index.html.
+
+    Используется и в home(), и в search() — в обоих местах нужны одни
+    и те же справочники для отрисовки формы (список жанров, границы
+    годов), с одинаковым fallback-поведением при недоступности БД.
+    Вынесено в один хелпер вместо копии try/except в каждом маршруте.
+    """
+    try:
+        genres = film_repository.get_all_genres()
+    except Exception:
+        # Логируем полную причину на сервере: этот except обязан
+        # ловить и "MySQL недоступна" (ожидаемо), и настоящий баг в
+        # коде (неожиданно) — без логирования второе тихо тонет
+        # в первом, и обе ситуации выглядят для пользователя одинаково.
+        logger.exception("не удалось получить список жанров")
+        genres = []
+
+    try:
+        year_range = film_repository.get_year_range()
+    except Exception:
+        logger.exception("не удалось получить диапазон годов")
+        year_range = {"min_year": 2006, "max_year": 2006}
+
+    return genres, year_range
+
+
+@app.route("/")
+def home():
+    genres, year_range = _get_search_form_context()
+
+    return render_template("index.html",
+                           movies=None, query="", genre="",
+                           year_from="", year_to="", offset=0,
+                           genres=genres, year_range=year_range,
+                           default_image=DEFAULT_POSTER, db_error=None)
+
+
+@app.route("/search")
+def search():
+    query     = request.args.get("q",         "").strip()
+    genre     = request.args.get("genre",     "").strip()
+    year_from = request.args.get("year_from", "").strip()
+    year_to   = request.args.get("year_to",   "").strip()
+
+    try:
+        offset = max(0, int(request.args.get("offset", 0)))
+    except ValueError:
+        offset = 0
+
+    movies   = None
+    db_error = None
+
+    # ── Проверяем годы ДО похода в базу: "от" и "до" должны быть числами
+    # в диапазоне YEAR_MIN..YEAR_MAX, иначе поиск не выполняется вообще.
+    yf, year_error = _parse_year(year_from)
+    if not year_error:
+        yt, year_error = _parse_year(year_to)
+    else:
+        yt = None
+    if not year_error and yf is not None and yt is not None and yf > yt:
+        year_error = '«Год от» не может быть больше «Год до».'
+
+    if year_error:
+        movies = []
+    else:
+        try:
+            if query:
+                movies = film_repository.search_by_title(query, offset=offset)
+
+            if not movies and genre:
+                movies = film_repository.search_by_genre(genre,
+                                                          year_from=yf, year_to=yt,
+                                                          offset=offset)
+        except Exception:
+            logger.exception("search: ошибка при поиске (query=%r, genre=%r)", query, genre)
+            db_error = ("База данных временно недоступна. "
+                        "Попробуйте позже.")
+            movies = []
+
+    # ── Логируем поиск в MongoDB (некорректные годы не логируем) ──
+    results_count = len(movies) if movies else 0
+    if year_error:
+        pass
+    elif query:
+        search_logger.log_search(search_type="title", search_value=query,
+                                 results_count=results_count)
+    elif genre:
+        search_logger.log_search(search_type="genre", search_value=genre,
+                                 genre=genre, year_from=year_from, year_to=year_to,
+                                 results_count=results_count)
+
+    # ── Добавляем постеры из movie_posters (write DB) ─────────────
+    if movies:
+        poster_enricher.enrich(movies)
+
+    genres, year_range = _get_search_form_context()
+
+    return render_template("index.html",
+                           movies=movies, query=query, genre=genre,
+                           year_from=year_from, year_to=year_to,
+                           offset=offset, genres=genres,
+                           year_range=year_range,
+                           default_image=DEFAULT_POSTER,
+                           db_error=db_error, year_error=year_error)
+
+
+@app.route("/api/suggest")
+def suggest():
+    """Autocomplete: возвращает до 5 фильмов по части названия (JSON)."""
+    q = request.args.get("q", "").strip()
+    if len(q) < 2:
+        return jsonify([])
+    try:
+        films = film_repository.search_by_title(q, limit=5) or []
+    except Exception:
+        logger.exception("suggest: не удалось выполнить автокомплит (q=%r)", q)
+        return jsonify([])
+    return jsonify([
+        {"title": f["title"],
+         "genre": f.get("genre") or "",
+         "year":  f.get("year")  or ""}
+        for f in films
+    ])
+
+
+@app.route("/api/film/news")
+def film_news():
+    """GET /api/film/news?title=<название> — информация о фильме через Firecrawl."""
+    title = request.args.get("title", "").strip()
+    if not title:
+        return jsonify({"error": "Не указано название фильма"}), 400
+
+    results = film_news_service.get_film_news(title)
+    return jsonify({"title": title, "results": results})
+
+
+@app.route("/gallery")
+def gallery():
+    """Галерея всех AI-постеров. 24 фильма на страницу."""
+    page_size = 24
+
+    try:
+        offset = max(0, int(request.args.get("offset", 0)))
+    except ValueError:
+        offset = 0
+
+    try:
+        films = film_repository.get_all_films(limit=page_size, offset=offset)
+        total = film_repository.get_total_films()
+    except Exception:
+        logger.exception("gallery: не удалось получить фильмы (offset=%d)", offset)
+        films = []
+        total = 0
+
+    if films:
+        poster_enricher.enrich(films)
+
+    return render_template(
+        "gallery.html",
+        films=films,
+        total=total,
+        offset=offset,
+        page_size=page_size,
+        default_image=DEFAULT_POSTER,
+    )
+
+
+@app.route("/api/poster/regenerate", methods=["POST"])
+def api_poster_regenerate():
+    """
+    POST /api/poster/regenerate
+    Тело запроса: {"film_id": 42}
+    Ответ: {"image_url": "/posters/001102.webp"}
+           или {"error": "..."}
+
+    Генерирует новый постер для одного фильма вне очереди.
+    Всегда создаёт новую запись в movie_posters (намеренная регенерация).
+    """
+    data    = request.get_json(silent=True) or {}
+    film_id = data.get("film_id")
+
+    if not film_id:
+        return jsonify({"error": "film_id required"}), 400
+
+    try:
+        film_id = int(film_id)
+    except (ValueError, TypeError):
+        return jsonify({"error": "film_id must be an integer"}), 400
+
+    film = film_repository.get_film_by_id(film_id)
+    if not film:
+        return jsonify({"error": f"Film {film_id} not found in Sakila"}), 404
+
+    try:
+        from services.ai_posters import (
+            MockProvider, PosterStorage, PosterRepository, PosterService,
+        )
+        service = PosterService(
+            provider=MockProvider(),
+            storage=PosterStorage(POSTERS_DIR),
+            repository=PosterRepository(),
+        )
+        service.generate(
+            film_id=film["film_id"],
+            title=film["title"],
+            genre=film["genre"] or "",
+            description=film["description"] or "",
+        )
+        url = service.get_poster_url(film["film_id"])
+        return jsonify({"image_url": url})
+
+    except Exception:
+        # Полную причину (может содержать пути на диске, детали БД)
+        # логируем на сервере, а клиенту отдаём общее сообщение —
+        # чтобы не раскрывать внутреннее устройство приложения.
+        logger.exception("api_poster_regenerate: не удалось сгенерировать постер (film_id=%d)", film_id)
+        return jsonify({"error": "Не удалось сгенерировать постер. Попробуйте позже."}), 500
+
+
+@app.route("/stats/searches")
+def stats_searches():
+    try:
+        offset = max(0, int(request.args.get("offset", 0)))
+    except ValueError:
+        offset = 0
+    items = search_stats.get_all_searches(limit=10, offset=offset)
+    total = search_stats.get_total_searches()
+    return render_template("stats_list.html",
+                           items=items, total=total, offset=offset,
+                           list_type="searches",
+                           title="Все поиски")
+
+
+@app.route("/stats/unique")
+def stats_unique():
+    try:
+        offset = max(0, int(request.args.get("offset", 0)))
+    except ValueError:
+        offset = 0
+    items = search_stats.get_unique_searches(limit=10, offset=offset)
+    total = search_stats.get_unique_queries()
+    return render_template("stats_list.html",
+                           items=items, total=total, offset=offset,
+                           list_type="unique",
+                           title="Уникальные запросы")
+
+
+@app.route("/stats")
+def stats():
+    popular = search_stats.get_popular_searches(5)
+    recent  = search_stats.get_recent_searches(5)
+    total   = search_stats.get_total_searches()
+    unique  = search_stats.get_unique_queries()
+
+    return render_template("stats.html",
+                           popular=popular, recent=recent,
+                           total=total, unique=unique)

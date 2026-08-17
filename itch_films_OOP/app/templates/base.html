@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+{# data-bs-theme="dark" включает встроенную тёмную тему Bootstrap 5.3.
+   Все компоненты Bootstrap автоматически получат тёмные цвета. #}
+<html lang="ru" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    {# Bootstrap 5 CSS — раньше грузился с CDN (cdn.jsdelivr.net), теперь
+       файл лежит локально в static/vendor/: не зависим от чужого сервера
+       и не тратим лишний DNS/TLS round-trip на сторонний домен. #}
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}"
+    >
+
+    {# Bootstrap Icons — та же причина, файлы (CSS + шрифты) локально. #}
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='vendor/bootstrap-icons/bootstrap-icons.min.css') }}"
+    >
+
+    {# Наш кастомный CSS — подключаем ПОСЛЕ Bootstrap,
+       чтобы наши стили перекрывали стили Bootstrap. #}
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='css/style.css') }}"
+    >
+
+    <title>{% block title %}ITCH Films{% endblock %}</title>
+</head>
+<body>
+
+    {# Кинематографический фон: position:fixed, z-index:0.
+       Виден на ВСЕХ страницах сайта через единый класс page-hero-background.
+       Слайд-шоу запускается JS ниже, до bootstrap.bundle. #}
+    <div class="page-hero-background">
+        <div class="hero-bg hero-bg-1 is-active"></div>
+        <div class="hero-bg hero-bg-2"></div>
+        <div class="hero-bg hero-bg-3"></div>
+        <div class="hero-bg hero-bg-4"></div>
+        <div class="hero-overlay"></div>
+    </div>
+
+    {# ── Шапка сайта ─────────────────────────── #}
+    <header class="site-header">
+        <div class="container">
+            <div class="d-flex align-items-center justify-content-between">
+
+                {# Логотип #}
+                <a href="/" class="site-logo text-decoration-none">
+                    ITCH<span>.</span>Films
+                </a>
+
+                {# Навигация #}
+                <nav class="site-nav">
+                    <a href="/"><i class="bi bi-house me-1"></i>Главная</a>
+                    <a href="/gallery"><i class="bi bi-images me-1"></i>Галерея</a>
+                    <a href="/stats"><i class="bi bi-bar-chart me-1"></i>Статистика</a>
+                </nav>
+
+            </div>
+        </div>
+    </header>
+
+    {# ── Основной контент ─────────────────────── #}
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    {# ── Футер ────────────────────────────────── #}
+    <footer class="site-footer">
+        <div class="container">
+            <p class="mb-0">ITCH Films &copy; 2026 &mdash; данные из базы Sakila</p>
+        </div>
+    </footer>
+
+    {# Bootstrap JS — подключаем в конце body, теперь тоже локально.
+       bundle.min.js включает Popper.js — нужен для выпадающих меню и tooltip'ов. #}
+    <script
+        src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}">
+    </script>
+
+    {# Слайд-шоу фона: общий для всех страниц.
+       Каждые 13 сек переключает is-active между .hero-bg слайдами.
+       CSS transition:opacity 1.5s делает плавный fade. #}
+    <script>
+    (function () {
+        const slides = document.querySelectorAll('.hero-bg');
+        let current = 0;
+        setInterval(function () {
+            slides[current].classList.remove('is-active');
+            current = (current + 1) % slides.length;
+            slides[current].classList.add('is-active');
+        }, 13000);
+    }());
+    </script>
+
+    {# Блок для страничного JS — каждый шаблон может добавить свои скрипты сюда. #}
+    {% block scripts %}{% endblock %}
+
+</body>
+</html>

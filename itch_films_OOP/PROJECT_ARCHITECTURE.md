@@ -1,6 +1,6 @@
 # Project Architecture — ITCH Films Premium (ООП-версия)
 
-**Stack:** Python 3.14 · Flask 3.0.3 · MySQL (Sakila, read-only) · MongoDB 7.0.37 · OpenAI Images API (`gpt-image-2`) · Firecrawl · Bootstrap 5
+**Stack:** Python 3.14 · Flask 3.1.3 · MySQL (Sakila, read-only) · MongoDB 7.0.37 · OpenAI Images API (`gpt-image-2`) · Firecrawl · Bootstrap 5
 
 > Этот проект — самостоятельная копия [`../itch_films/`](../itch_films/),
 > переработанная под ООП (см. раздел «ООП-переработка» ниже), независимая
@@ -33,7 +33,8 @@
   объектов (`film_repository.search_by_title(...)`) вместо голых функций
   модуля. Полные class-based views (`Flask.views.MethodView`) — тоже
   валидный вариант, но менее типичный для Flask и не был выбран.
-- `scripts/generate_movie_posters.py` и его 79 тестов — оставлены как есть
+- `scripts/generate_movie_posters.py` и его тесты (изначально 79, сейчас 80 —
+  см. «Проверено на равнозначность» ниже) — оставлены как есть
   (уже вызывают ООП-классы `PosterService`/`GenerationQueue`/`OpenAIProvider`
   внутри, а сам скрипт — одноразовый CLI-раннер, а не часть веб-приложения).
 - `_parse_year()` в `routes.py` — чистая функция валидации без обращения
@@ -48,9 +49,13 @@
 - 4 SQL-запроса в `mysql_connector.py` вручную собирали один и тот же
   словарь из 7 колонок — вынесено в `FilmRepository._row_to_movie()`.
 
-**Проверено на равнозначность:** оба тестовых прогона (`pytest`, 116 unit +
-37 Playwright против живого сервера) проходят так же, как в `itch_films/` —
-поведение сайта не изменилось, изменилась только внутренняя организация кода.
+**Проверено на равнозначность (на момент ООП-переделки, 2026-08-14):** оба тестовых
+прогона (`pytest`, 116 unit + 37 Playwright против живого сервера) проходили так же,
+как в `itch_films/` — поведение сайта не изменилось, изменилась только внутренняя
+организация кода. С тех пор в `itch_films_OOP` добавлены дополнительные unit-тесты
+для исправлений, специфичных для этой копии (fencing-token в очереди генерации,
+rate limiter — см. `tests/test_queue_fencing.py`, `tests/test_rate_limiter.py`),
+не перенесённых обратно в `itch_films/`: сейчас 129 unit + 37 Playwright.
 
 ---
 
@@ -77,7 +82,8 @@ itch_films_OOP/
 │   │   ├── search_logger.py      # class SearchLogger — запись поисков в MongoDB
 │   │   ├── search_stats.py       # class SearchStatsRepository — чтение статистики
 │   │   ├── film_news_service.py  # class FilmNewsService — обёртка над FirecrawlClient
-│   │   └── poster_enricher.py    # class PosterEnricher — подмешивание постеров
+│   │   ├── poster_enricher.py    # class PosterEnricher — подмешивание постеров
+│   │   └── rate_limiter.py       # class RateLimiter — in-memory rate limit (без внешних зависимостей)
 │   ├── static/css/
 │   │   └── style.css        # Glassmorphism, dark theme, анимации
 │   └── templates/
@@ -96,7 +102,9 @@ itch_films_OOP/
 ├── tests/
 │   ├── conftest.py, test_itch_films.py       # Playwright, нужен запущенный сервер
 │   ├── test_openai_provider.py               # Unit-тесты OpenAIProvider
-│   └── test_generate_posters.py              # Unit-тесты CLI-скрипта и очереди
+│   ├── test_generate_posters.py              # Unit-тесты CLI-скрипта и очереди
+│   ├── test_queue_fencing.py                 # Unit-тесты claim_token/fencing в GenerationQueue
+│   └── test_rate_limiter.py                  # Unit-тесты RateLimiter
 ├── docs/                      # Исторические отчёты и прогресс
 └── .claude/project_vision.md  # Vision-документ курсового проекта
 ```
@@ -129,9 +137,9 @@ services/ai_posters/
 | GET | `/` | Главная страница, форма поиска |
 | GET | `/search` | Поиск по названию/жанру/году; постеры подмешиваются из `movie_posters` |
 | GET | `/api/suggest` | JSON-автокомплит, до 5 фильмов |
-| GET | `/api/film/news?title=...` | Firecrawl-поиск доп. информации о фильме |
+| GET | `/api/film/news?title=...` | Firecrawl-поиск доп. информации о фильме; `title` ограничен 200 символами, rate limit 10 запросов/мин с IP (429 при превышении) |
 | GET | `/gallery` | Галерея всех 1001 постеров, пагинация по 24 |
-| POST | `/api/poster/regenerate` | Перегенерация одного постера через `MockProvider` — без вызова OpenAI, без затрат |
+| POST | `/api/poster/regenerate` | Перегенерация одного постера через `MockProvider` — без вызова OpenAI, без затрат; rate limit 5 запросов/мин с IP (429 при превышении) |
 | GET | `/posters/<filename>` | Отдаёт WebP-файл из `storage/posters/` |
 | GET | `/stats`, `/stats/searches`, `/stats/unique` | Статистика поисков из MongoDB |
 
@@ -224,6 +232,7 @@ SearchStatsRepository
 | `services/search_stats.py` | Model / MongoDB | `class SearchStatsRepository` — чтение агрегированной статистики |
 | `services/film_news_service.py` | Service | `class FilmNewsService` — обёртка над `services/firecrawl` |
 | `services/poster_enricher.py` | Service | `class PosterEnricher` — подмешивает `image_url` в список фильмов |
+| `services/rate_limiter.py` | Service | `class RateLimiter` — in-memory sliding-window лимит запросов по IP, без внешних зависимостей (не шарится между процессами) |
 | `base.html` | View | Навигация, Bootstrap 5, общая структура |
 | `index.html` | View | Карточки фильмов, форма поиска, жанровые кнопки |
 | `gallery.html` | View | Сетка всех AI-постеров, пагинация, кнопка «Обновить постер» |
@@ -289,6 +298,13 @@ length
 4. repository.save(...) → poster_id      (PosterRepository, таблица movie_posters)
 ```
 
+`PosterStorage.save()` создаёт файл через `open(path, 'xb')` (эксклюзивное создание) с
+повтором при коллизии имени — а не `'wb'`, который тихо перезаписал бы файл при гонке
+между двумя одновременными генерациями. Если шаг 4 (запись в БД) падает после того, как
+файл уже записан на диск, `PosterService.generate()` удаляет этот осиротевший файл, прежде
+чем пробросить исключение дальше — чтобы неудачные генерации не копили мусор в
+`storage/posters/`.
+
 ### Версионирование постеров
 
 Таблица `movie_posters` **хранит историю, а не текущее состояние**: у одного `film_id`
@@ -305,6 +321,16 @@ length
 `GenerationQueue` — таблица `film_id → status (pending/processing/done/failed)`,
 используется только CLI-скриптом для батчевой генерации через OpenAI. `failed` никогда
 не ретраится автоматически — только явным флагом `--retry-failed`.
+
+Захват элемента очереди (`mark_processing()`) — атомарный `UPDATE ... WHERE status='pending'`
+(а не read-then-write из `get_pending()`+отдельного UPDATE), чтобы два параллельных запуска
+скрипта не могли забрать один и тот же элемент и сгенерировать постер дважды. При успешном
+захвате `mark_processing()` возвращает `claim_token` — счётчик, увеличивающийся при каждом
+захвате строки. `mark_done()`/`mark_failed()` принимают этот token и применяют изменение,
+только если он всё ещё совпадает с текущим значением в БД («fencing token» / optimistic
+concurrency): если элемент по таймауту (`processing_started_at`, не `created_at`) был сброшен
+в `pending` и захвачен заново другим запуском, результат первого (уже неактуального) захвата
+не перезапишет статус нового.
 
 ### Текущее состояние данных (аудит 2026-08-10)
 
@@ -337,10 +363,14 @@ length
 ### Тесты
 
 `python -m pytest -v` из `itch_films_OOP/` (`pytest.ini`: `testpaths = tests`) —
-покрывает `tests/test_generate_posters.py` (CLI-скрипт, очередь, dry-run safety),
-`tests/test_openai_provider.py` (маппинг размеров/параметров OpenAI API).
-`tests/test_itch_films.py` — Playwright-тесты, требуют предварительно запущенного
-сервера (`python run.py` в отдельном терминале), запускаются отдельно.
+129 unit-тестов, полностью замоканы (без реальных БД/API), покрывает:
+`tests/test_generate_posters.py` (80, CLI-скрипт, очередь, dry-run safety),
+`tests/test_openai_provider.py` (37, маппинг размеров/параметров OpenAI API),
+`tests/test_queue_fencing.py` (7, claim_token/fencing в `GenerationQueue`),
+`tests/test_rate_limiter.py` (5, `RateLimiter`).
+`tests/test_itch_films.py` (37) — Playwright-тесты, требуют предварительно запущенного
+сервера (`python run.py` в отдельном терминале), запускаются отдельно и не входят
+в CI (`.github/workflows/itch-films-oop-ci.yml` гоняет только unit-тесты).
 Прямых тестов на цветовую палитру `MockProvider` нет — смена палитры не ломает
 существующие assertions.
 
@@ -368,3 +398,14 @@ length
   `PosterRepository` / `GenerationQueue`, нигде больше нет сырых SQL-запросов к этим таблицам.
 - **Версионирование вместо перезаписи** — постеры никогда не удаляются при регенерации,
   всегда добавляется новая запись; «текущая» версия вычисляется через `MAX(id)`.
+- **Optimistic concurrency / fencing token** — захват элемента очереди генерации
+  атомарен (условный `UPDATE ... WHERE status='pending'`), а `claim_token` защищает
+  от того, что результат устаревшего (перезахваченного по таймауту) захвата
+  перезапишет статус нового — см. «Очередь генерации» выше.
+- **Атомарная запись файлов** — `PosterStorage.save()` создаёт файл через
+  `open(path, 'xb')` (эксклюзивно), а не `'wb'`, чтобы два одновременных сохранения
+  не могли перезаписать файл друг друга при коллизии имени.
+- **Rate limiting без внешних зависимостей** — `/api/film/news` и `/api/poster/regenerate`
+  (платные/ресурсоёмкие, без аутентификации) защищены простым in-memory
+  `RateLimiter`; для проекта без системы логина это осознанный компромисс вместо
+  полноценной авторизации.

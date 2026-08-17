@@ -29,7 +29,7 @@
 ## Tech Stack
 
 - Python 3.14
-- Flask 3.0.3
+- Flask 3.1.3
 - MySQL / Sakila
 - MongoDB
 - OpenAI Images API
@@ -71,7 +71,8 @@ itch_films_OOP/
 │   │   ├── search_logger.py      # class SearchLogger — запись поисков в MongoDB
 │   │   ├── search_stats.py       # class SearchStatsRepository — чтение статистики
 │   │   ├── film_news_service.py  # class FilmNewsService — обёртка над FirecrawlClient
-│   │   └── poster_enricher.py    # class PosterEnricher — подмешивание постеров
+│   │   ├── poster_enricher.py    # class PosterEnricher — подмешивание постеров
+│   │   └── rate_limiter.py       # class RateLimiter — простой in-memory rate limit
 │   ├── static/, templates/
 ├── services/                     # УЖЕ были классами — не переделывались
 │   ├── ai_posters/                # Пайплайн генерации AI-постеров (PosterService и т.д.)
@@ -111,8 +112,10 @@ python run.py
 python -m pytest
 ```
 
-`tests/test_itch_films.py` — Playwright, требует запущенного сервера в отдельном
-терминале (`python run.py`), не входит в обычный прогон unit-тестов.
+129 unit-тестов (полностью замоканы, без реальных БД/API) — гоняются в CI
+(см. бейдж вверху). `tests/test_itch_films.py` (37 Playwright-тестов) требует
+запущенного сервера в отдельном терминале (`python run.py`), не входит в обычный
+прогон unit-тестов и не входит в CI.
 
 ## AI Posters
 

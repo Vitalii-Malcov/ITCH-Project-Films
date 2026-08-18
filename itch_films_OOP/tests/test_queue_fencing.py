@@ -69,6 +69,7 @@ class TestMarkDoneFencing:
 
         executed_sql = cursor.execute.call_args[0][0]
         assert "claim_token = %s" in executed_sql
+        assert "status = 'processing'" in executed_sql
         assert cursor.execute.call_args[0][1] == ('done', 42, 3)
 
     def test_stale_token_is_ignored(self):
@@ -83,10 +84,12 @@ class TestMarkDoneFencing:
         with _mock_connect(cursor):
             queue.mark_done(queue_id=42, claim_token=1)  # не выбрасывает
 
-    def test_no_token_means_unconditional_update(self):
+    def test_no_token_only_updates_pending_item(self):
         """
         Без claim_token (элемент никогда не проходил через mark_processing,
-        например film_id отсутствует в Sakila) — обновление безусловное.
+        например film_id отсутствует в Sakila) — обновление всё равно
+        ограничено status='pending', чтобы не перезаписать более свежий
+        захват элемента.
         """
         cursor = MagicMock()
         cursor.rowcount = 1
@@ -97,6 +100,7 @@ class TestMarkDoneFencing:
 
         executed_sql = cursor.execute.call_args[0][0]
         assert "claim_token" not in executed_sql
+        assert "status = 'pending'" in executed_sql
         assert cursor.execute.call_args[0][1] == ('done', 42)
 
 
@@ -112,6 +116,7 @@ class TestMarkFailedFencing:
         executed_sql = cursor.execute.call_args[0][0]
         assert "tries = tries + 1" in executed_sql
         assert "claim_token = %s" in executed_sql
+        assert "status = 'processing'" in executed_sql
         assert cursor.execute.call_args[0][1] == (42, 3)
 
     def test_stale_token_is_ignored(self):

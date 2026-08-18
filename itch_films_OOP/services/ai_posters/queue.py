@@ -283,14 +283,15 @@ class GenerationQueue:
                 cursor.execute(
                     "UPDATE movie_generation_queue "
                     "SET status = 'failed', tries = tries + 1 "
-                    "WHERE id = %s",
+                    "WHERE id = %s AND status = 'pending'",
                     (queue_id,),
                 )
             else:
                 cursor.execute(
                     "UPDATE movie_generation_queue "
                     "SET status = 'failed', tries = tries + 1 "
-                    "WHERE id = %s AND claim_token = %s",
+                    "WHERE id = %s AND claim_token = %s "
+                    "AND status = 'processing'",
                     (queue_id, claim_token),
                 )
             conn.commit()
@@ -578,13 +579,15 @@ class GenerationQueue:
             cursor = conn.cursor()
             if claim_token is None:
                 cursor.execute(
-                    "UPDATE movie_generation_queue SET status = %s WHERE id = %s",
+                    "UPDATE movie_generation_queue SET status = %s "
+                    "WHERE id = %s AND status = 'pending'",
                     (status, queue_id),
                 )
             else:
                 cursor.execute(
                     "UPDATE movie_generation_queue SET status = %s "
-                    "WHERE id = %s AND claim_token = %s",
+                    "WHERE id = %s AND claim_token = %s "
+                    "AND status = 'processing'",
                     (status, queue_id, claim_token),
                 )
             conn.commit()

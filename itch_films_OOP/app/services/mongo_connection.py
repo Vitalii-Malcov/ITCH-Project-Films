@@ -2,10 +2,7 @@
 # app/services/mongo_connection.py
 # Тонкая обёртка над одним подключением к MongoDB.
 #
-# В процедурной версии (mongo_logger.py и log_stats.py) один и тот же
-# код подключения (MongoClient + server_info() + try/except) был
-# скопирован дважды — по разу в каждом файле. Здесь это один класс:
-# и SearchLogger (пишет поиски), и SearchStatsRepository (читает
+# И SearchLogger (пишет поиски), и SearchStatsRepository (читает
 # статистику) получают готовый MongoConnection через конструктор
 # (dependency injection) вместо того, чтобы каждый лез в pymongo сам.
 # ─────────────────────────────────────────────

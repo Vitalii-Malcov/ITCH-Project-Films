@@ -34,11 +34,7 @@ logger = logging.getLogger(__name__)
 
 # ── sys.path: находим itch_films_OOP/local_settings.py ────────────────
 # __file__ → .../itch_films_OOP/services/ai_posters/poster_repository.py
-# dirname × 3 → itch_films_OOP/ (корень ЭТОГО проекта, не репозитория —
-# services/ai_posters/ живёт внутри itch_films_OOP/, а не на уровне
-# репозитория, поэтому дополнительный os.path.join(..., 'itch_films')
-# здесь не нужен: раньше он был нужен, когда services/ai_posters/ лежал
-# в корне репозитория рядом с папкой itch_films/, а не внутри неё).
+# dirname × 3 → itch_films_OOP/ (корень проекта).
 _itch_films = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )

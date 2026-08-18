@@ -61,9 +61,9 @@ CREATE TABLE IF NOT EXISTS movie_generation_queue (
 )
 """
 
-# Для таблицы, созданной ДО появления этих колонок (эта база — общая
-# с itch_films/, CREATE TABLE IF NOT EXISTS её не тронет) — добавляем
-# колонки отдельным ALTER, если их ещё нет. MySQL 8.0.29+.
+# Таблица могла быть создана раньше, до появления этих колонок
+# (CREATE TABLE IF NOT EXISTS её не тронет) — добавляем колонки
+# отдельным ALTER, если их ещё нет. MySQL 8.0.29+.
 _ADD_PROCESSING_STARTED_AT_SQL = """
 ALTER TABLE movie_generation_queue
 ADD COLUMN IF NOT EXISTS processing_started_at TIMESTAMP NULL

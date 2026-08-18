@@ -7,7 +7,12 @@
 
 import os
 
-from app import app   # импортируем объект app из папки app/
+from app import create_app   # импортируем фабрику из папки app/
+
+# Создаём приложение на уровне модуля (а не только внутри __main__) —
+# так `app` доступен и WSGI-серверу, который импортирует `run:app`
+# напрямую, минуя `if __name__ == "__main__"` (например, gunicorn).
+app = create_app()
 
 if __name__ == "__main__":
     # debug читается из переменной окружения FLASK_DEBUG.

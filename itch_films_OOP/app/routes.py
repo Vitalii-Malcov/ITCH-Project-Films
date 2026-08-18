@@ -15,21 +15,20 @@ import logging
 import os
 import sys
 
-# Этот файл предназначен для импорта через run.py → app/__init__.py,
+# Этот файл предназначен для импорта через create_app() (app/__init__.py),
 # а не для прямого запуска. Но если его всё же запустят напрямую
 # (`python app/routes.py`) — Python подставляет папку ЭТОГО файла
 # (app/) в начало sys.path, а не корень проекта. Если в PYTHONPATH
 # уже был путь к какому-то другому каталогу с одноимённым пакетом
 # `app`, Python может по ошибке импортировать его вместо нашего.
-# Вставляем свой корень первым — так `from app import app` ниже
-# гарантированно найдёт именно itch_films_OOP/app/.
+# Вставляем свой корень первым — так импорты `app.repositories` и
+# `app.services` ниже гарантированно найдут именно itch_films_OOP/app/.
 _project_root: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _project_root in sys.path:
     sys.path.remove(_project_root)
 sys.path.insert(0, _project_root)
 
-from flask import render_template, request, jsonify, send_from_directory
-from app import app
+from flask import Blueprint, render_template, request, jsonify, send_from_directory
 import local_settings
 
 from app.repositories import FilmRepository
@@ -44,6 +43,12 @@ from app.services import (
 from services.ai_posters import PosterRepository
 
 logger = logging.getLogger(__name__)
+
+# Blueprint вместо прямого `@bp.route(...)` на глобальном объекте app —
+# так routes.py больше не зависит от того, что app уже создан на уровне
+# модуля app/__init__.py. create_app() регистрирует этот Blueprint через
+# app.register_blueprint(bp) уже ПОСЛЕ того, как Flask-приложение создано.
+bp = Blueprint("main", __name__)
 
 # Пути относительно этого файла (itch_films_OOP/app/routes.py)
 # dirname x1 → itch_films_OOP/app/
@@ -122,7 +127,7 @@ def _parse_year(value: str):
     return year, None
 
 
-@app.route("/posters/<filename>")
+@bp.route("/posters/<filename>")
 def serve_poster(filename):
     """Отдаёт AI-сгенерированные файлы постеров из storage/posters/."""
     return send_from_directory(POSTERS_DIR, filename)
@@ -156,7 +161,7 @@ def _get_search_form_context() -> tuple[list[dict], dict]:
     return genres, year_range
 
 
-@app.route("/")
+@bp.route("/")
 def home():
     genres, year_range = _get_search_form_context()
 
@@ -167,7 +172,7 @@ def home():
                            default_image=DEFAULT_POSTER, db_error=None)
 
 
-@app.route("/search")
+@bp.route("/search")
 def search():
     query     = request.args.get("q",         "").strip()
     genre     = request.args.get("genre",     "").strip()
@@ -236,7 +241,7 @@ def search():
                            db_error=db_error, year_error=year_error)
 
 
-@app.route("/api/suggest")
+@bp.route("/api/suggest")
 def suggest():
     """Autocomplete: возвращает до 5 фильмов по части названия (JSON)."""
     q = request.args.get("q", "").strip()
@@ -255,7 +260,7 @@ def suggest():
     ])
 
 
-@app.route("/api/film/news")
+@bp.route("/api/film/news")
 def film_news():
     """GET /api/film/news?title=<название> — информация о фильме через Firecrawl."""
     if not film_news_limiter.allow(request.remote_addr or "unknown"):
@@ -271,7 +276,7 @@ def film_news():
     return jsonify({"title": title, "results": results})
 
 
-@app.route("/gallery")
+@bp.route("/gallery")
 def gallery():
     """Галерея всех AI-постеров. 24 фильма на страницу."""
     page_size = 24
@@ -302,7 +307,7 @@ def gallery():
     )
 
 
-@app.route("/stats/searches")
+@bp.route("/stats/searches")
 def stats_searches():
     try:
         offset = max(0, int(request.args.get("offset", 0)))
@@ -316,7 +321,7 @@ def stats_searches():
                            title="Все поиски")
 
 
-@app.route("/stats/unique")
+@bp.route("/stats/unique")
 def stats_unique():
     try:
         offset = max(0, int(request.args.get("offset", 0)))
@@ -330,7 +335,7 @@ def stats_unique():
                            title="Уникальные запросы")
 
 
-@app.route("/stats")
+@bp.route("/stats")
 def stats():
     popular = search_stats.get_popular_searches(5)
     recent  = search_stats.get_recent_searches(5)

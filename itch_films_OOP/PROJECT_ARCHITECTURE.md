@@ -71,8 +71,9 @@ itch_films_OOP/
 ├── .env.example
 ├── pytest.ini                # testpaths=tests, pythonpath=.
 ├── app/
-│   ├── __init__.py          # Создаёт Flask-приложение, настраивает sys.path на
-│   │                        # itch_films_OOP/, грузит .env, подключает routes
+│   ├── __init__.py          # create_app() — фабрика Flask-приложения: настраивает
+│   │                        # sys.path на itch_films_OOP/, грузит .env, регистрирует
+│   │                        # Blueprint из routes.py
 │   ├── routes.py            # URL-маршруты: /, /search, /gallery, /stats, /api/*
 │   │                        # (view-функции вызывают методы объектов ниже)
 │   ├── repositories/
@@ -223,8 +224,8 @@ SearchStatsRepository
 |---|---|---|
 | `run.py` | Запуск | Точка входа проекта, `debug` читается из `FLASK_DEBUG` (по умолчанию `False`) |
 | `local_settings.py` | Конфигурация | MySQL (Sakila read/write) и MongoDB credentials, SECRET_KEY — не в Git |
-| `__init__.py` | Flask | Создаёт `app`, настраивает `sys.path` на `itch_films_OOP/`, грузит `.env`, подключает `routes` |
-| `routes.py` | Controller | Принимает HTTP-запросы, вызывает методы объектов `film_repository`/`search_logger`/`search_stats`/`film_news_service`/`poster_enricher` |
+| `__init__.py` | Flask | `create_app()` — фабрика: настраивает `sys.path` на `itch_films_OOP/`, грузит `.env`, создаёт `app`, регистрирует Blueprint из `routes.py` |
+| `routes.py` | Controller | Blueprint (`bp`) с view-функциями; принимает HTTP-запросы, вызывает методы объектов `film_repository`/`search_logger`/`search_stats`/`film_news_service`/`poster_enricher` |
 | `repositories/film_repository.py` | Model / MySQL | `class FilmRepository` — SQL-запросы к Sakila, параметризованные (`%s`), кэш жанров/годов в `self` |
 | `services/mongo_connection.py` | Model / MongoDB | `class MongoConnection` — общее подключение (DI в `SearchLogger`/`SearchStatsRepository`) |
 | `services/search_logger.py` | Model / MongoDB | `class SearchLogger` — запись логов поиска, отказоустойчивый |

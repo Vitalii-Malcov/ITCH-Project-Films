@@ -68,16 +68,12 @@ YEAR_MAX = 2026
 # угодно длинной строкой (лишние расходы, не влияя на качество поиска).
 FILM_NEWS_TITLE_MAX_LENGTH = 200
 
-# Rate limit для "дорогих" эндпоинтов без аутентификации:
-#   /api/film/news         — платный вызов Firecrawl на каждый запрос;
-#   /api/poster/regenerate — пишет файл на диск + строку в movie_posters
-#                             на каждый запрос.
-# У проекта нет системы логина/пользователей (курсовой проект без
-# авторизации) — полноценная auth здесь была бы избыточна. Rate limit —
-# минимальная защита от одного клиента, заваливающего эндпоинт запросами
-# (случайно или намеренно) и раздувающего расходы/диск/таблицу БД.
-film_news_limiter        = RateLimiter(max_requests=10, window_seconds=60)
-poster_regenerate_limiter = RateLimiter(max_requests=5, window_seconds=60)
+# Rate limit для /api/film/news — платный вызов Firecrawl на каждый запрос,
+# без аутентификации. У проекта нет системы логина/пользователей (курсовой
+# проект без авторизации) — полноценная auth здесь была бы избыточна. Rate
+# limit — минимальная защита от одного клиента, заваливающего эндпоинт
+# запросами (случайно или намеренно) и раздувающего расходы.
+film_news_limiter = RateLimiter(max_requests=10, window_seconds=60)
 
 
 # ── Сборка объектов сервисного слоя (композиция) ────────────────────
@@ -304,69 +300,6 @@ def gallery():
         page_size=page_size,
         default_image=DEFAULT_POSTER,
     )
-
-
-@app.route("/api/poster/regenerate", methods=["POST"])
-def api_poster_regenerate():
-    """
-    POST /api/poster/regenerate
-    Тело запроса: {"film_id": 42}
-    Ответ: {"image_url": "/posters/001102.webp"}
-           или {"error": "..."}
-
-    Генерирует новый постер для одного фильма вне очереди.
-    Всегда создаёт новую запись в movie_posters (намеренная регенерация).
-
-    Без авторизации намеренно: кнопка "перегенерировать" в gallery.html/
-    index.html — фича для обычных посетителей сайта, а не админ-функция,
-    так что серверный токен здесь сломал бы её для всех (токен пришлось
-    бы прописать прямо в публичный JS, то есть смысла в нём как в секрете
-    всё равно бы не было). Защита — rate limiter ниже (5 запросов/60с на
-    IP) и то, что run.py по умолчанию поднимает сервер только на
-    localhost (host= не задан).
-    """
-    if not poster_regenerate_limiter.allow(request.remote_addr or "unknown"):
-        return jsonify({"error": "Слишком много запросов, попробуйте позже."}), 429
-
-    data    = request.get_json(silent=True) or {}
-    film_id = data.get("film_id")
-
-    if not film_id:
-        return jsonify({"error": "film_id required"}), 400
-
-    try:
-        film_id = int(film_id)
-    except (ValueError, TypeError):
-        return jsonify({"error": "film_id must be an integer"}), 400
-
-    film = film_repository.get_film_by_id(film_id)
-    if not film:
-        return jsonify({"error": f"Film {film_id} not found in Sakila"}), 404
-
-    try:
-        from services.ai_posters import (
-            MockProvider, PosterStorage, PosterRepository, PosterService,
-        )
-        service = PosterService(
-            provider=MockProvider(),
-            storage=PosterStorage(POSTERS_DIR),
-            repository=PosterRepository(),
-        )
-        service.generate(
-            film_id=film["film_id"],
-            title=film["title"],
-            genre=film["genre"] or "",
-            description=film["description"] or "",
-        )
-        url = service.get_poster_url(film["film_id"])
-        return jsonify({"image_url": url})
-
-    except Exception:
-        # Полную причину (может содержать пути на диске, детали БД)
-        # логируем на сервере, а клиенту отдаём общее сообщение —
-        # чтобы не раскрывать внутреннее устройство приложения.
-        logger.exception("api_poster_regenerate: не удалось сгенерировать постер (film_id=%d)", film_id)
-        return jsonify({"error": "Не удалось сгенерировать постер. Попробуйте позже."}), 500
 
 
 @app.route("/stats/searches")

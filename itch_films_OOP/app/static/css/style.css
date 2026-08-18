@@ -1038,58 +1038,6 @@ body:has(.results-panel) .hero-content {
     text-overflow: ellipsis;
 }
 
-/* ── Кнопка регенерации постера ─────────── */
-
-/* Позиция: правый верхний угол постера, рядом с рейтингом (слева) */
-.regen-btn {
-    position: absolute;
-    top: 0.55rem;
-    right: 0.55rem;
-    z-index: 3;
-    background: rgba(11, 12, 16, 0.75);
-    border: 1px solid rgba(226, 185, 75, 0.4);
-    color: var(--accent);
-    border-radius: 0.3rem;
-    width: 26px;
-    height: 26px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    opacity: 0;                     /* скрыта — появляется при hover карточки */
-    transition: opacity 0.2s, background 0.2s;
-    font-size: 0.78rem;
-    backdrop-filter: blur(4px);
-    padding: 0;
-    line-height: 1;
-}
-
-/* Показываем при наведении на любую карточку */
-.film-card:hover .regen-btn,
-.gallery-card:hover .regen-btn {
-    opacity: 1;
-}
-
-.regen-btn:hover {
-    background: rgba(226, 185, 75, 0.18);
-    border-color: var(--accent);
-}
-
-.regen-btn:disabled {
-    cursor: wait;
-    opacity: 0.6;
-}
-
-/* Иконка крутится пока идёт генерация */
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
-
-.regen-btn.loading i {
-    animation: spin 0.7s linear infinite;
-    display: inline-block;
-}
-
 /* ── Галерея постеров ────────────────────── */
 .gallery-header {
     margin-bottom: 1.5rem;

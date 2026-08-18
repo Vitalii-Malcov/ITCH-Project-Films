@@ -199,14 +199,6 @@
                                 <span class="rating-badge">{{ movie.rating }}</span>
                                 {% endif %}
 
-                                {# Кнопка регенерации — правый верхний угол #}
-                                <button class="regen-btn"
-                                        data-film-id="{{ movie.film_id }}"
-                                        onclick="regeneratePoster(this)"
-                                        title="Перегенерировать постер">
-                                    <i class="bi bi-arrow-clockwise"></i>
-                                </button>
-
                                 {# Жанр — правый нижний угол #}
                                 {% if movie.genre %}
                                 <span class="genre-badge">{{ movie.genre }}</span>
@@ -493,38 +485,6 @@ function loadFilmNews(btn) {
         .catch(function() {
             modalBody.innerHTML = '<p class="text-danger">Не удалось загрузить информацию.</p>';
         });
-}
-
-/*
- * Регенерирует постер для одного фильма через POST /api/poster/regenerate.
- * После успеха обновляет <img src> без перезагрузки страницы.
- * ?t=timestamp в URL сбрасывает кеш браузера для этого изображения.
- */
-function regeneratePoster(btn) {
-    const filmId = btn.getAttribute('data-film-id');
-    const card   = btn.closest('.film-card, .gallery-card');
-    const img    = card ? card.querySelector('img') : null;
-    if (!filmId || !img) return;
-
-    btn.disabled = true;
-    btn.classList.add('loading');
-
-    fetch('/api/poster/regenerate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ film_id: parseInt(filmId, 10) }),
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (data.image_url) {
-            img.src = data.image_url + '?t=' + Date.now();
-        }
-    })
-    .catch(function() { /* сеть недоступна — ничего не делаем */ })
-    .finally(function() {
-        btn.disabled = false;
-        btn.classList.remove('loading');
-    });
 }
 
 /* Экранирует HTML-спецсимволы (защита от XSS в данных от API) */

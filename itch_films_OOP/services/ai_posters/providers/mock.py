@@ -15,10 +15,11 @@ MockProvider — заглушка для разработки, реализую�
 Настоящий провайдер уже существует — см. providers/openai_provider.py
 (class OpenAIProvider(AIImageProvider)), используется batch-скриптом
 scripts/generate_movie_posters.py. MockProvider остаётся отдельным
-классом для разработки, тестов и /api/poster/regenerate (не тратит
-вызовы платного OpenAI API) — выбор провайдера — это Strategy pattern
-(см. AIImageProvider в base.py): PosterService принимает любой из них
-через конструктор, не зная, какой именно активен.
+классом для разработки и тестов (не тратит вызовы платного OpenAI API,
+а также служит фолбэком, когда OpenAI отклоняет генерацию) — выбор
+провайдера — это Strategy pattern (см. AIImageProvider в base.py):
+PosterService принимает любой из них через конструктор, не зная,
+какой именно активен.
 """
 
 import io
@@ -96,8 +97,8 @@ class MockProvider(AIImageProvider):
             # и так детерминирован. Раньше здесь стоял random.seed(seed),
             # который не влиял на результат, зато мутировал ГЛОБАЛЬНОЕ
             # состояние random для всего процесса — при параллельных
-            # запросах на /api/poster/regenerate это могло незаметно
-            # менять поведение случайности где-то ещё в приложении.
+            # вызовах generate() это могло незаметно менять поведение
+            # случайности где-то ещё в приложении.
             color = _color_from_prompt(prompt)
 
             img = Image.new('RGB', (width, height), color=color)

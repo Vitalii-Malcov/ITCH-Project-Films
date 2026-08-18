@@ -139,7 +139,6 @@ services/ai_posters/
 | GET | `/api/suggest` | JSON-автокомплит, до 5 фильмов |
 | GET | `/api/film/news?title=...` | Firecrawl-поиск доп. информации о фильме; `title` ограничен 200 символами, rate limit 10 запросов/мин с IP (429 при превышении) |
 | GET | `/gallery` | Галерея всех 1001 постеров, пагинация по 24 |
-| POST | `/api/poster/regenerate` | Перегенерация одного постера через `MockProvider` — без вызова OpenAI, без затрат; rate limit 5 запросов/мин с IP (429 при превышении) |
 | GET | `/posters/<filename>` | Отдаёт WebP-файл из `storage/posters/` |
 | GET | `/stats`, `/stats/searches`, `/stats/unique` | Статистика поисков из MongoDB |
 
@@ -235,7 +234,7 @@ SearchStatsRepository
 | `services/rate_limiter.py` | Service | `class RateLimiter` — in-memory sliding-window лимит запросов по IP, без внешних зависимостей (не шарится между процессами) |
 | `base.html` | View | Навигация, Bootstrap 5, общая структура |
 | `index.html` | View | Карточки фильмов, форма поиска, жанровые кнопки |
-| `gallery.html` | View | Сетка всех AI-постеров, пагинация, кнопка «Обновить постер» |
+| `gallery.html` | View | Сетка всех AI-постеров, пагинация |
 | `stats.html` | View | Таблицы популярных и последних поисков |
 
 ---
@@ -289,10 +288,8 @@ length
                           1024×1536, output_format=webp). Используется только CLI-скриптом
                           scripts/generate_movie_posters.py — платный вызов.
        MockProvider    — рисует однотонный WebP через Pillow, без сети и без затрат.
-                          Используется как: (а) fallback для фильмов, заблокированных
-                          OpenAI-модерацией, (б) провайдер для /api/poster/regenerate —
-                          Flask-эндпоинт жёстко привязан к MockProvider, чтобы кнопка
-                          «Обновить постер» в галерее не могла случайно потратить деньги.
+                          Используется как fallback для фильмов, заблокированных
+                          OpenAI-модерацией, и в тестах.
 
 3. storage.save(bytes) → filename        (PosterStorage, storage/posters/)
 4. repository.save(...) → poster_id      (PosterRepository, таблица movie_posters)
@@ -357,8 +354,7 @@ concurrency): если элемент по таймауту (`processing_started
 ### Галерея и пагинация
 
 `/gallery` показывает все 1001 постер, по 24 на страницу (`PAGE_SIZE = 24` в `routes.py`),
-пагинация через `?offset=N`. Каждая карточка имеет кнопку «Обновить постер»
-(`/api/poster/regenerate`, MockProvider) — проверено вручную, работает.
+пагинация через `?offset=N`.
 
 ### Тесты
 
@@ -405,7 +401,6 @@ concurrency): если элемент по таймауту (`processing_started
 - **Атомарная запись файлов** — `PosterStorage.save()` создаёт файл через
   `open(path, 'xb')` (эксклюзивно), а не `'wb'`, чтобы два одновременных сохранения
   не могли перезаписать файл друг друга при коллизии имени.
-- **Rate limiting без внешних зависимостей** — `/api/film/news` и `/api/poster/regenerate`
-  (платные/ресурсоёмкие, без аутентификации) защищены простым in-memory
-  `RateLimiter`; для проекта без системы логина это осознанный компромисс вместо
-  полноценной авторизации.
+- **Rate limiting без внешних зависимостей** — `/api/film/news` (платный, без
+  аутентификации) защищён простым in-memory `RateLimiter`; для проекта без
+  системы логина это осознанный компромисс вместо полноценной авторизации.

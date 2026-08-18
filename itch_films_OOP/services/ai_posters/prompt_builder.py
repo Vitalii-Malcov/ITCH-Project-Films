@@ -148,6 +148,15 @@ _BASE_KEYWORDS: list[str] = [
     'masterful cinematography',
 ]
 
+# Слова из названий Sakila, из-за которых OpenAI отклонял генерацию
+# (content policy) — подтверждено на практике для SHREK LICENSE,
+# CITIZEN SHREK, PINOCCHIO SIMON, BANGER PINOCCHIO, LEGEND JEDI (все
+# 5 провалившихся попыток из 1001 фильма содержали ровно одно из этих
+# слов). Список точечный, а не общий список франшиз: другие похожие
+# имена (POTTER, ZORRO, TARZAN, ALADDIN, GOLDFINGER, MULAN и т.д.)
+# генерировались через OpenAI без проблем.
+_BLOCKED_TITLE_WORDS: frozenset[str] = frozenset({'SHREK', 'JEDI', 'PINOCCHIO'})
+
 # negative_prompt не зависит от фильма — всегда запрещаем одни и те же элементы
 _NEGATIVE_PROMPT: str = (
     'text, letters, words, numbers, title text, movie title, '
@@ -207,9 +216,12 @@ def build_prompt(
         if theme:
             parts.append(f"inspired by: {theme}")
 
-    # 5. Подсказка по названию — помогает AI сфокусироваться на сюжете без добавления текста
+    # 5. Подсказка по названию — помогает AI сфокусироваться на сюжете без добавления текста.
+    #    Слова из _BLOCKED_TITLE_WORDS вырезаются перед отправкой в промпт.
     if title:
-        parts.append(f"visual subject based on '{title}'")
+        safe_title = _strip_blocked_words(title)
+        if safe_title:
+            parts.append(f"visual subject based on '{safe_title}'")
 
     prompt = ', '.join(filter(None, parts))
     return prompt, _NEGATIVE_PROMPT
@@ -234,6 +246,18 @@ def _resolve_style(style: str, genre: str) -> str:
         return style if style in _STYLE_KEYWORDS else 'netflix'
     genre_lower = (genre or '').lower()
     return _GENRE_TO_STYLE.get(genre_lower, 'netflix')
+
+
+def _strip_blocked_words(title: str) -> str:
+    """
+    Убирает из названия слова из _BLOCKED_TITLE_WORDS перед вставкой в промпт.
+
+    Например, 'SHREK LICENSE' -> 'LICENSE', 'CITIZEN SHREK' -> 'CITIZEN'.
+    Если после фильтрации ничего не остаётся, возвращает пустую строку —
+    вызывающий код в этом случае просто не добавляет строку с названием.
+    """
+    words = [w for w in title.split() if w.upper() not in _BLOCKED_TITLE_WORDS]
+    return ' '.join(words)
 
 
 def _extract_theme(description: str, max_chars: int = 200) -> str:

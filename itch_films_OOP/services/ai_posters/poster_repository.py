@@ -24,6 +24,7 @@ PosterRepository — абстракция базы данных для табл�
 import os
 import sys
 import logging
+from contextlib import contextmanager
 
 import mysql.connector
 from mysql.connector.connection import MySQLConnection
@@ -90,24 +91,43 @@ class PosterRepository:
                 details=str(exc),
             ) from exc
 
+    @contextmanager
+    def _cursor(self, dictionary: bool = False):
+        """
+        Открывает соединение и курсор, отдаёт (conn, cursor) вызывающему
+        коду через `with`, и гарантированно закрывает оба в finally —
+        включая случай, когда сам conn.cursor() падает: без этого
+        соединение осталось бы занятым в пуле навсегда (pool_size=5 —
+        несколько таких сбоев подряд исчерпали бы весь пул). Тот же
+        паттерн, что и FilmRepository._cursor()
+        (app/repositories/film_repository.py).
+        """
+        conn = None
+        cursor = None
+        try:
+            conn = self._connect()
+            cursor = conn.cursor(dictionary=dictionary)
+            yield conn, cursor
+        finally:
+            if cursor is not None:
+                cursor.close()
+            if conn is not None:
+                conn.close()
+
     # ── DDL ───────────────────────────────────────────────────────────
 
     def create_table(self) -> None:
         """Создаёт таблицу movie_posters, если она не существует."""
-        conn = self._connect()
-        cursor = conn.cursor()
         try:
-            cursor.execute(_CREATE_TABLE_SQL)
-            conn.commit()
-            logger.info("Таблица movie_posters готова.")
+            with self._cursor() as (conn, cursor):
+                cursor.execute(_CREATE_TABLE_SQL)
+                conn.commit()
+                logger.info("Таблица movie_posters готова.")
         except mysql.connector.Error as exc:
             raise RepositoryError(
                 "Failed to create movie_posters table.",
                 details=str(exc),
             ) from exc
-        finally:
-            cursor.close()
-            conn.close()
 
     # ── Чтение ──────────────────────────────────────────────────────────
 
@@ -116,23 +136,19 @@ class PosterRepository:
         Возвращает True, если для film_id существует хотя бы один завершённый постер.
         Используется PosterService перед генерацией, чтобы пропускать уже готовые фильмы.
         """
-        conn = self._connect()
-        cursor = conn.cursor()
         try:
-            cursor.execute(
-                "SELECT 1 FROM movie_posters "
-                "WHERE film_id = %s AND status = 'completed' LIMIT 1",
-                (film_id,),
-            )
-            return cursor.fetchone() is not None
+            with self._cursor() as (conn, cursor):
+                cursor.execute(
+                    "SELECT 1 FROM movie_posters "
+                    "WHERE film_id = %s AND status = 'completed' LIMIT 1",
+                    (film_id,),
+                )
+                return cursor.fetchone() is not None
         except mysql.connector.Error as exc:
             raise RepositoryError(
                 f"poster_exists query failed for film_id={film_id}.",
                 details=str(exc),
             ) from exc
-        finally:
-            cursor.close()
-            conn.close()
 
     def get_completed_film_ids(self) -> set[int]:
         """
@@ -142,22 +158,18 @@ class PosterRepository:
         Используется скриптом генерации для эффективного построения очереди:
         один запрос вместо 1001 отдельного вызова poster_exists().
         """
-        conn = self._connect()
-        cursor = conn.cursor()
         try:
-            cursor.execute(
-                "SELECT DISTINCT film_id FROM movie_posters "
-                "WHERE status = 'completed'"
-            )
-            return {row[0] for row in cursor.fetchall()}
+            with self._cursor() as (conn, cursor):
+                cursor.execute(
+                    "SELECT DISTINCT film_id FROM movie_posters "
+                    "WHERE status = 'completed'"
+                )
+                return {row[0] for row in cursor.fetchall()}
         except mysql.connector.Error as exc:
             raise RepositoryError(
                 "get_completed_film_ids failed.",
                 details=str(exc),
             ) from exc
-        finally:
-            cursor.close()
-            conn.close()
 
     def openai_poster_exists(self, film_id: int) -> bool:
         """
@@ -168,24 +180,20 @@ class PosterRepository:
         Mock-постеры (provider='mock') намеренно исключены, чтобы фильмы
         с mock-плейсхолдерами можно было по-прежнему перегенерировать через OpenAI.
         """
-        conn = self._connect()
-        cursor = conn.cursor()
         try:
-            cursor.execute(
-                "SELECT 1 FROM movie_posters "
-                "WHERE film_id = %s AND provider = 'openai' "
-                "AND status = 'completed' LIMIT 1",
-                (film_id,),
-            )
-            return cursor.fetchone() is not None
+            with self._cursor() as (conn, cursor):
+                cursor.execute(
+                    "SELECT 1 FROM movie_posters "
+                    "WHERE film_id = %s AND provider = 'openai' "
+                    "AND status = 'completed' LIMIT 1",
+                    (film_id,),
+                )
+                return cursor.fetchone() is not None
         except mysql.connector.Error as exc:
             raise RepositoryError(
                 f"openai_poster_exists query failed for film_id={film_id}.",
                 details=str(exc),
             ) from exc
-        finally:
-            cursor.close()
-            conn.close()
 
     def get_openai_completed_film_ids(self) -> set[int]:
         """
@@ -194,52 +202,44 @@ class PosterRepository:
         Используется скриптом генерации, чтобы не ставить в очередь повторно
         фильмы, у которых уже есть настоящий постер от OpenAI. Mock-постеры исключены.
         """
-        conn = self._connect()
-        cursor = conn.cursor()
         try:
-            cursor.execute(
-                "SELECT DISTINCT film_id FROM movie_posters "
-                "WHERE provider = 'openai' AND status = 'completed'"
-            )
-            return {row[0] for row in cursor.fetchall()}
+            with self._cursor() as (conn, cursor):
+                cursor.execute(
+                    "SELECT DISTINCT film_id FROM movie_posters "
+                    "WHERE provider = 'openai' AND status = 'completed'"
+                )
+                return {row[0] for row in cursor.fetchall()}
         except mysql.connector.Error as exc:
             raise RepositoryError(
                 "get_openai_completed_film_ids failed.",
                 details=str(exc),
             ) from exc
-        finally:
-            cursor.close()
-            conn.close()
 
     def get_latest_by_film_id(self, film_id: int) -> dict | None:
         """
         Возвращает самый недавно сгенерированный постер для одного фильма, либо None.
         «Актуальный» определяется через MAX(id) — избегает конфликтов по created_at.
         """
-        conn = self._connect()
-        cursor = conn.cursor(dictionary=True)
         try:
-            cursor.execute(
-                """
-                SELECT mp.*
-                FROM   movie_posters mp
-                WHERE  mp.id = (
-                    SELECT MAX(id) FROM movie_posters
-                    WHERE film_id = %s AND status = 'completed'
+            with self._cursor(dictionary=True) as (conn, cursor):
+                cursor.execute(
+                    """
+                    SELECT mp.*
+                    FROM   movie_posters mp
+                    WHERE  mp.id = (
+                        SELECT MAX(id) FROM movie_posters
+                        WHERE film_id = %s AND status = 'completed'
+                    )
+                    """,
+                    (film_id,),
                 )
-                """,
-                (film_id,),
-            )
-            row = cursor.fetchone()
-            return self._add_url(row) if row else None
+                row = cursor.fetchone()
+                return self._add_url(row) if row else None
         except mysql.connector.Error as exc:
             raise RepositoryError(
                 f"get_latest_by_film_id failed for film_id={film_id}.",
                 details=str(exc),
             ) from exc
-        finally:
-            cursor.close()
-            conn.close()
 
     def get_latest_by_film_ids(self, film_ids: list[int]) -> dict[int, dict]:
         """
@@ -267,20 +267,16 @@ class PosterRepository:
                 GROUP  BY film_id
             ) latest ON mp.id = latest.max_id
         """
-        conn = self._connect()
-        cursor = conn.cursor(dictionary=True)
         try:
-            cursor.execute(sql, film_ids)
-            rows = cursor.fetchall()
-            return {row['film_id']: self._add_url(row) for row in rows}
+            with self._cursor(dictionary=True) as (conn, cursor):
+                cursor.execute(sql, film_ids)
+                rows = cursor.fetchall()
+                return {row['film_id']: self._add_url(row) for row in rows}
         except mysql.connector.Error as exc:
             raise RepositoryError(
                 "get_latest_by_film_ids failed.",
                 details=str(exc),
             ) from exc
-        finally:
-            cursor.close()
-            conn.close()
 
     # ── Запись ─────────────────────────────────────────────────────────
 
@@ -306,39 +302,35 @@ class PosterRepository:
         Допускается несколько записей на один film_id — каждая представляет
         версию. Актуальная версия всегда извлекается через MAX(id).
         """
-        conn = self._connect()
-        cursor = conn.cursor()
         try:
-            cursor.execute(
-                """
-                INSERT INTO movie_posters
-                    (film_id, provider, model, prompt, negative_prompt,
-                     style, seed, width, height, image_path,
-                     status, generation_time)
-                VALUES
-                    (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    film_id, provider, model, prompt, negative_prompt,
-                    style, seed, width, height, image_path,
-                    status, generation_time,
-                ),
-            )
-            conn.commit()
-            poster_id = cursor.lastrowid
-            logger.info(
-                f"Сохранена запись постера id={poster_id} "
-                f"film_id={film_id} provider={provider}"
-            )
-            return poster_id
+            with self._cursor() as (conn, cursor):
+                cursor.execute(
+                    """
+                    INSERT INTO movie_posters
+                        (film_id, provider, model, prompt, negative_prompt,
+                         style, seed, width, height, image_path,
+                         status, generation_time)
+                    VALUES
+                        (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        film_id, provider, model, prompt, negative_prompt,
+                        style, seed, width, height, image_path,
+                        status, generation_time,
+                    ),
+                )
+                conn.commit()
+                poster_id = cursor.lastrowid
+                logger.info(
+                    f"Сохранена запись постера id={poster_id} "
+                    f"film_id={film_id} provider={provider}"
+                )
+                return poster_id
         except mysql.connector.Error as exc:
             raise RepositoryError(
                 f"Failed to save poster record for film_id={film_id}.",
                 details=str(exc),
             ) from exc
-        finally:
-            cursor.close()
-            conn.close()
 
     # ── Приватные вспомогательные методы ───────────────────────────────────────
 

@@ -24,6 +24,11 @@ class FilmNewsService:
 
     def __init__(self):
         self._client: FirecrawlClient | None = None
+        # Кэш по (нормализованное название, limit) — Firecrawl платный, а
+        # каталог Sakila фиксирован (1000 фильмов), так что рост кэша
+        # ограничен естественным образом; не нужна ни очистка, ни TTL.
+        # Живёт, пока жив процесс — как и film_repository._genres_cache.
+        self._cache: dict[tuple[str, int], list] = {}
 
     def _get_client(self) -> FirecrawlClient | None:
         if self._client is None:
@@ -40,12 +45,21 @@ class FilmNewsService:
         Wikipedia/IMDb/Letterboxd — информационные страницы, а не
         только рецензии). При любой ошибке возвращает [] — сайт
         продолжает работать без этой фичи.
+
+        Повторный запрос с тем же названием (без учёта регистра и
+        лишних пробелов) отдаётся из кэша, а не тратит платный вызов
+        Firecrawl заново.
         """
+        cache_key = (title.strip().lower(), limit)
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
         client = self._get_client()
         if client is None:
             return []
         try:
             result = client.search(f"{title} film", limit=limit)
+            self._cache[cache_key] = result.results
             return result.results
         except FirecrawlError as e:
             print(f"[Firecrawl] Поиск не удался для '{title}': {e}")

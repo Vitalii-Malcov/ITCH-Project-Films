@@ -765,6 +765,15 @@ class TestQueueSync:
 
         mock_cursor = MagicMock()
         mock_cursor.fetchall.return_value = existing_rows
+        # Реальный mysql-connector после executemany() выставляет rowcount =
+        # число реально задетых строк. sync_for_openai_generation теперь
+        # читает cursor.rowcount (compare-and-swap UPDATE может задеть меньше
+        # строк, чем было "запланировано", если статус успел измениться
+        # конкурентно) — в этих unit-тестах гонок нет, поэтому имитируем
+        # rowcount = len(данных пачки), как и было бы в реальности без гонки.
+        mock_cursor.executemany.side_effect = (
+            lambda sql, data: setattr(mock_cursor, 'rowcount', len(data))
+        )
         mock_conn   = MagicMock()
         mock_conn.cursor.return_value = mock_cursor
 

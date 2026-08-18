@@ -135,6 +135,76 @@ class TestSearchByTitle:
         expect(page.locator(".no-results")).to_contain_text("Ничего не найдено")
 
 
+class TestFilmNewsModalBackButton:
+    """
+    Регрессия: кнопка "Подробнее" открывает модалку поверх /search?...
+    (без смены URL). Раньше "назад" в браузере не закрывал модалку, а сразу
+    уводил со страницы результатов поиска на предыдущую запись в истории
+    (главная) — см. history.pushState/popstate в index.html:loadFilmNews().
+    """
+
+    def test_back_closes_modal_without_leaving_search_page(self, page: Page):
+        # Идём через главную и реальный поиск (а не page.goto(".../search?...")
+        # напрямую) — иначе в истории браузера не будет записи "/" и проверка
+        # "второе 'назад' ведёт на главную" будет бессмысленной.
+        page.goto(BASE_URL)
+        page.fill("#search-input", "ace")
+        page.click("button.search-btn")
+        page.wait_for_selector(".film-card", timeout=5000)
+
+        page.click("button.btn-news >> nth=0")
+        expect(page.locator("#newsModal")).to_be_visible()
+        # Bootstrap игнорирует hide() (в т.ч. вызванный нашим popstate-
+        # слушателем), пока ещё не завершилась CSS-анимация открытия
+        # (Modal._isTransitioning) — ждём её конца (transition ~300ms).
+        page.wait_for_timeout(350)
+
+        page.go_back()
+        expect(page.locator("#newsModal")).to_be_hidden()
+        assert "/search" in page.url, (
+            f"Первое нажатие 'назад' должно было только закрыть модалку "
+            f"и остаться на странице результатов поиска, получили: {page.url}"
+        )
+
+        page.go_back()
+        assert page.url.rstrip("/") == BASE_URL, (
+            f"Второе нажатие 'назад' (модалка уже закрыта) должно вести "
+            f"на главную страницу, получили: {page.url}"
+        )
+
+    def test_close_button_consumes_history_entry(self, page: Page):
+        """
+        Закрытие крестиком (не через 'назад') не должно оставлять в истории
+        мёртвую запись — следующее 'назад' сразу ведёт на главную.
+        """
+        page.goto(BASE_URL)
+        page.fill("#search-input", "ace")
+        page.click("button.search-btn")
+        page.wait_for_selector(".film-card", timeout=5000)
+
+        page.click("button.btn-news >> nth=0")
+        expect(page.locator("#newsModal")).to_be_visible()
+        page.wait_for_timeout(350)  # см. комментарий в тесте выше про _isTransitioning
+
+        page.click("#newsModal .btn-close")
+        expect(page.locator("#newsModal")).to_be_hidden()
+        # to_be_hidden() видит display:none в тот же момент, когда Bootstrap
+        # его выставляет — ДО того как успевает завершиться наш собственный
+        # обработчик hidden.bs.modal (history.back() для "смыва" фиктивной
+        # записи). Без паузы здесь page.go_back() ниже иногда улетает почти
+        # одновременно с этим внутренним back() и браузер схлопывает два
+        # шага "назад" в один. Ждём, пока внутренняя навигация точно
+        # завершится, прежде чем инициировать свою.
+        page.wait_for_timeout(200)
+
+        page.go_back()
+        assert page.url.rstrip("/") == BASE_URL, (
+            f"После закрытия крестиком фиктивная запись истории должна "
+            f"быть 'смыта' — 'назад' должен сразу вести на главную, "
+            f"получили: {page.url}"
+        )
+
+
 # ── 4. Поиск по жанру ─────────────────────────────────────────────
 
 class TestSearchByGenre:

@@ -68,6 +68,15 @@
         {% block content %}{% endblock %}
     </main>
 
+    {# Модалки — ВНЕ <main> намеренно: main { position: relative; z-index: 1; }
+       создаёт свой stacking context, а Bootstrap добавляет .modal-backdrop
+       отдельным элементом прямо в <body> с z-index:1050. Если модалка лежит
+       внутри <main>, её собственный z-index (1055 у Bootstrap) действует
+       только ВНУТРИ контекста main — снаружи весь <main> целиком (z-index:1)
+       всё равно оказывается ниже backdrop, и клики по модалке (крестик,
+       ссылки) перехватывает затемнение позади неё. #}
+    {% block modals %}{% endblock %}
+
     {# ── Футер ────────────────────────────────── #}
     <footer class="site-footer">
         <div class="container">

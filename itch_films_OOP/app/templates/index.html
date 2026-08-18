@@ -292,8 +292,13 @@
     </div>
 </section>
 
+{% endblock %}
+
 {# ── Модал: подробнее о фильме ─────────────────────────────────── #}
-{# Один модал на всю страницу. JS заполняет его перед показом. #}
+{# Один модал на всю страницу. JS заполняет его перед показом.
+   Блок modals рендерится в base.html СНАРУЖИ <main> — см. комментарий
+   там же про stacking context и .modal-backdrop. #}
+{% block modals %}
 <div class="modal fade" id="newsModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content news-modal-content">
@@ -307,7 +312,6 @@
         </div>
     </div>
 </div>
-
 {% endblock %}
 
 {% block scripts %}
@@ -393,7 +397,28 @@
 /*
  * Загружает информацию о фильме через /api/film/news и показывает в модале.
  * data-title на кнопке → fetch → Bootstrap modal.
+ *
+ * История браузера: открытие модалки не меняет URL, поэтому кнопка "назад"
+ * по умолчанию не "закрывает шторку", а сразу уводит со страницы результатов
+ * поиска на предыдущую запись в истории (обычно — главная страница). Чтобы
+ * "назад" сначала закрывал модалку, при открытии добавляем фиктивную запись
+ * в историю (history.pushState без смены URL); popstate-слушатель ниже при
+ * срабатывании закрывает модалку вместо обычной навигации. При закрытии
+ * модалки любым другим способом (крестик, клик вне, Escape) эта фиктивная
+ * запись "смывается" через history.back(), чтобы не оставлять её висеть.
  */
+var newsModalHistoryPushed      = false; // добавили ли мы запись истории под текущую открытую модалку
+var newsModalClosingViaPopstate = false; // закрытие пришло от popstate — history.back() уже не нужен
+
+window.addEventListener('popstate', function() {
+    if (!newsModalHistoryPushed) return;
+    var instance = bootstrap.Modal.getInstance(document.getElementById('newsModal'));
+    if (instance) {
+        newsModalClosingViaPopstate = true;
+        instance.hide();
+    }
+});
+
 function loadFilmNews(btn) {
     const title      = btn.getAttribute('data-title');
     const modalEl    = document.getElementById('newsModal');
@@ -409,6 +434,9 @@ function loadFilmNews(btn) {
     if (existing) existing.dispose();
     var modal = new bootstrap.Modal(modalEl);
     modal.show();
+
+    history.pushState({ newsModalOpen: true }, '', location.href);
+    newsModalHistoryPushed = true;
 
     // Именованная функция — нужна чтобы removeEventListener мог её найти.
     // Анонимную функцию удалить нельзя: каждый new Function() — новая ссылка.
@@ -431,6 +459,16 @@ function loadFilmNews(btn) {
     modalEl.addEventListener('hidden.bs.modal', function() {
         modalEl.removeEventListener('click', handleOutsideClick);
         modalEl._outsideClickHandler = null;
+
+        // Закрытие через крестик/клик вне/Escape — сами "смываем" фиктивную
+        // запись истории. Если закрытие пришло от popstate (пользователь уже
+        // нажал "назад"), запись и так уже израсходована браузером — повторный
+        // history.back() увёл бы на страницу ДО результатов поиска.
+        if (newsModalHistoryPushed && !newsModalClosingViaPopstate) {
+            history.back();
+        }
+        newsModalHistoryPushed = false;
+        newsModalClosingViaPopstate = false;
     }, { once: true });
 
     fetch('/api/film/news?title=' + encodeURIComponent(title))

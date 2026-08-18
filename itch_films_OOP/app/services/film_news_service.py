@@ -7,6 +7,8 @@
 
 # services/firecrawl/ — собственная копия клиента внутри itch_films_OOP,
 # импортируется благодаря sys.path на корень проекта из app/__init__.py.
+import threading
+
 from services.firecrawl import FirecrawlClient, FirecrawlError
 
 
@@ -29,6 +31,15 @@ class FilmNewsService:
         # ограничен естественным образом; не нужна ни очистка, ни TTL.
         # Живёт, пока жив процесс — как и film_repository._genres_cache.
         self._cache: dict[tuple[str, int], list] = {}
+        # Dev-сервер Flask многопоточный (threaded=True в run.py) — лок
+        # защищает только сам словарь _cache от гонки при чтении/записи
+        # из разных потоков. Сетевой вызов к Firecrawl НЕ под локом —
+        # иначе одновременные запросы про РАЗНЫЕ фильмы блокировали бы
+        # друг друга, ожидая чужого сетевого ответа. Остаётся узкое окно
+        # (два потока одновременно промахнулись мимо кэша по ОДНОМУ и
+        # тому же названию и оба сходили в Firecrawl) — редкий и дешёвый
+        # случай, не стоящий более сложной блокировки по конкретному ключу.
+        self._cache_lock = threading.Lock()
 
     def _get_client(self) -> FirecrawlClient | None:
         if self._client is None:
@@ -51,15 +62,17 @@ class FilmNewsService:
         Firecrawl заново.
         """
         cache_key = (title.strip().lower(), limit)
-        if cache_key in self._cache:
-            return self._cache[cache_key]
+        with self._cache_lock:
+            if cache_key in self._cache:
+                return self._cache[cache_key]
 
         client = self._get_client()
         if client is None:
             return []
         try:
             result = client.search(f"{title} film", limit=limit)
-            self._cache[cache_key] = result.results
+            with self._cache_lock:
+                self._cache[cache_key] = result.results
             return result.results
         except FirecrawlError as e:
             print(f"[Firecrawl] Поиск не удался для '{title}': {e}")

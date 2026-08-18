@@ -467,7 +467,9 @@ function loadFilmNews(btn) {
             }
             var html = '<div class="news-list">';
             data.results.forEach(function(item) {
-                html += '<a href="' + esc(item.url) + '" target="_blank" ' +
+                var url = safeExternalUrl(item.url);
+                if (!url) return;
+                html += '<a href="' + esc(url) + '" target="_blank" ' +
                         'rel="noopener" class="news-item">' +
                         '<div class="news-item-title">' + esc(item.title || '') + '</div>' +
                         '<div class="news-item-desc">'  + esc(item.description || '') + '</div>' +
@@ -487,6 +489,18 @@ function esc(str) {
     return String(str)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;')
         .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/* Результаты Firecrawl — внешние данные; в href безопасны только http(s)-ссылки.
+   esc() экранирует HTML, но не защищает от javascript:-схемы в href — её
+   нужно отфильтровать отдельно, до вставки в атрибут. */
+function safeExternalUrl(value) {
+    try {
+        var url = new URL(String(value));
+        return (url.protocol === 'http:' || url.protocol === 'https:') ? url.href : null;
+    } catch (e) {
+        return null;
+    }
 }
 </script>
 {% endblock %}

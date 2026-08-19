@@ -129,7 +129,9 @@ class SearchStatsRepository:
         """
         Уникальные запросы постранично через агрегацию: группируем по
         search_value (count = сколько раз искали, last_seen = последний
-        раз), сортируем по частоте, применяем пагинацию.
+        раз), сортируем по частоте (при равенстве — по last_seen, иначе
+        порядок между одинаковыми count не определён и пагинация могла бы
+        задвоить/пропустить запись между страницами), применяем пагинацию.
         """
         collection = self._connection.collection
         if collection is None:
@@ -142,7 +144,7 @@ class SearchStatsRepository:
                     "count":     {"$sum": 1},
                     "last_seen": {"$max": "$timestamp"},
                 }},
-                {"$sort":  {"count": -1}},
+                {"$sort":  {"count": -1, "last_seen": -1}},
                 {"$skip":  offset},
                 {"$limit": limit},
             ]

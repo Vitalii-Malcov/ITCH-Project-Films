@@ -163,9 +163,20 @@
                                         {{ item.timestamp.strftime("%d.%m.%Y %H:%M") }}
                                     </small>
                                     {% if item.results_count %}
+                                    {# Склонение слова "результат" по числу: 1 результат,
+                                       2-4 результата, остальное — результатов
+                                       (кроме 11-14, там всегда "результатов"). #}
+                                    {% set n = item.results_count %}
+                                    {% if n % 10 == 1 and n % 100 != 11 %}
+                                        {% set word = "результат" %}
+                                    {% elif n % 10 in [2, 3, 4] and n % 100 not in [12, 13, 14] %}
+                                        {% set word = "результата" %}
+                                    {% else %}
+                                        {% set word = "результатов" %}
+                                    {% endif %}
                                     <small class="recent-results">
                                         <i class="bi bi-film me-1"></i>
-                                        {{ item.results_count }} рез.
+                                        {{ word }} {{ n }}
                                     </small>
                                     {% endif %}
                                     {% if item.genre %}

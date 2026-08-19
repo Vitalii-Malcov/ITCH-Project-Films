@@ -49,3 +49,22 @@ class SearchLogger:
         except Exception as e:
             print(f"[MongoDB] Ошибка записи: {e}")
             return None
+
+    def delete_all(self) -> int:
+        """
+        Удаляет все записи логов (кнопка "Сбросить статистику").
+
+        Возвращает количество удалённых документов, 0 — если MongoDB
+        недоступна или коллекция уже пуста.
+        """
+        collection = self._connection.collection
+        if collection is None:
+            print("[MongoDB] Сброс пропущен — нет подключения.")
+            return 0
+
+        try:
+            result = collection.delete_many({})
+            return result.deleted_count
+        except Exception as e:
+            print(f"[MongoDB] Ошибка сброса статистики: {e}")
+            return 0

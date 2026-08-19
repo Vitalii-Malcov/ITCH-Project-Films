@@ -22,6 +22,17 @@
                 <span class="stats-db-badge">
                     <i class="bi bi-database-fill me-1"></i>itch_films_logs
                 </span>
+
+                {# Сброс статистики: form + POST, чтобы действие нельзя было
+                   вызвать случайным переходом по ссылке. confirm() в onsubmit —
+                   защита от случайного клика (у проекта нет системы логина). #}
+                <form method="post" action="{{ url_for('main.stats_reset') }}"
+                      class="ms-auto"
+                      onsubmit="return confirm('Удалить всю статистику поисков без возможности восстановления?')">
+                    <button type="submit" class="btn btn-outline-danger btn-sm">
+                        🗑 Сбросить статистику
+                    </button>
+                </form>
             </div>
             <p class="text-secondary mb-0">
                 Статистика поисковых запросов в реальном времени

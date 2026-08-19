@@ -28,7 +28,7 @@ if _project_root in sys.path:
     sys.path.remove(_project_root)
 sys.path.insert(0, _project_root)
 
-from flask import Blueprint, render_template, request, jsonify, send_from_directory
+from flask import Blueprint, render_template, request, jsonify, send_from_directory, redirect, url_for
 import local_settings
 
 from app.repositories import FilmRepository
@@ -333,6 +333,13 @@ def stats_unique():
                            items=items, total=total, offset=offset,
                            list_type="unique",
                            title="Уникальные запросы")
+
+
+@bp.route("/stats/reset", methods=["POST"])
+def stats_reset():
+    """Удаляет всю статистику поисков из MongoDB (кнопка на /stats)."""
+    search_logger.delete_all()
+    return redirect(url_for("main.stats"))
 
 
 @bp.route("/stats")

@@ -14,7 +14,9 @@
             </h1>
             <p class="gallery-subtitle">
                 AI-постеры для всех фильмов базы Sakila
-                <span class="gallery-count">{{ total }} фильмов</span>
+                <span class="gallery-count">
+                    {{ total | plural_ru('фильм', 'фильма', 'фильмов') }} {{ total }}
+                </span>
             </p>
         </div>
 

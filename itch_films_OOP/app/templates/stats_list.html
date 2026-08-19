@@ -23,7 +23,7 @@
             </a>
             <h1 class="mb-0 fs-3">{{ title }}</h1>
             <span class="stats-db-badge ms-auto">
-                {{ total }} записей
+                {{ total | plural_ru('запись', 'записи', 'записей') }} {{ total }}
             </span>
         </div>
 

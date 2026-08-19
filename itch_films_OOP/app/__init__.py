@@ -40,6 +40,8 @@ from flask import Flask   # импортируем класс Flask из биб�
 from dotenv import load_dotenv
 import local_settings     # импортируем наши настройки
 
+from app.filters import plural_ru
+
 
 def create_app(config: dict | None = None) -> Flask:
     """
@@ -63,6 +65,10 @@ def create_app(config: dict | None = None) -> Flask:
 
     if config:
         app.config.update(config)
+
+    # Регистрируем кастомный фильтр для склонения слов по числу в шаблонах
+    # (например: {{ n | plural_ru('результат', 'результата', 'результатов') }}).
+    app.jinja_env.filters["plural_ru"] = plural_ru
 
     # Импортируем маршруты ПОСЛЕ создания app и регистрируем Blueprint.
     # Импорт внутри функции (а не на уровне модуля) — иначе получился

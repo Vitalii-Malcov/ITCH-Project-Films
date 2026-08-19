@@ -14,14 +14,15 @@ itch_films/local_settings.py
 itch_films/flask_out.txt
 
 # AI-generated poster files (binary, 2100+ files — tracked separately)
-storage/posters/
+itch_films/storage/posters/
+itch_films_OOP/storage/posters/
 
 # Generated knowledge graph artifacts
 graphify-out/
 Архивы/
 
 # Diagnostic / one-off scripts (not project code)
-scripts/debug/
+itch_films/scripts/debug/
 
 # Claude Code runtime files
 .claude/scheduled_tasks.lock

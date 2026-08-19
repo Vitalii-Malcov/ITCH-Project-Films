@@ -4,6 +4,21 @@
 # ─────────────────────────────────────────────
 
 import os
+import sys
+
+# Этот файл предназначен для импорта через run.py → app/__init__.py,
+# а не для прямого запуска. Но если его всё же запустят напрямую
+# (`python app/routes.py`) — Python подставляет папку ЭТОГО файла
+# (app/) в начало sys.path, а не корень проекта. Если в PYTHONPATH
+# уже был путь к соседнему проекту (itch_films_2/, itch_films_OOP/) —
+# у него тоже есть свой пакет `app`, и Python может по ошибке
+# импортировать ЕГО вместо нашего. Вставляем свой корень первым —
+# так `from app import app` ниже гарантированно найдёт именно
+# itch_films/app/, а не чужой одноимённый пакет.
+_project_root: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _project_root in sys.path:
+    sys.path.remove(_project_root)
+sys.path.insert(0, _project_root)
 
 from flask import render_template, request, jsonify, send_from_directory
 from app import app
@@ -25,14 +40,14 @@ from app.log_stats import (
 
 # Пути относительно этого файла (itch_films/app/routes.py)
 # dirname x1 → itch_films/app/
-# dirname x2 → itch_films/
-# dirname x3 → Project_IT_Career_Hub_2/  (корень проекта)
-_this_dir    = os.path.dirname(os.path.abspath(__file__))
-_project_root = os.path.normpath(os.path.join(_this_dir, '..', '..'))
-POSTERS_DIR  = os.path.join(_project_root, 'storage', 'posters')
+# dirname x2 → itch_films/  (корень проекта ITCH Films)
+_this_dir   = os.path.dirname(os.path.abspath(__file__))
+_itch_films = os.path.normpath(os.path.join(_this_dir, '..'))
+POSTERS_DIR = os.path.join(_itch_films, 'storage', 'posters')
 
-# sys.path на корень проекта настраивается один раз в app/__init__.py
-# (там же, где подключается Firecrawl-blueprint) — до импорта этого файла.
+# sys.path на корень itch_films/ уже настроен выше (в начале файла) и
+# ещё раз — в app/__init__.py до импорта этого файла (при обычном запуске
+# через run.py оба раза указывают на один и тот же путь, повтор безвреден).
 
 # Запасное изображение, если постер не найден в таблице movie_posters.
 DEFAULT_POSTER = '/static/images/placeholder_movie.png'

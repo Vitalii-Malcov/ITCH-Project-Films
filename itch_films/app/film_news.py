@@ -5,21 +5,8 @@
 # get_film_news() и не знает деталей Firecrawl.
 # ─────────────────────────────────────────────
 
-import os
-import sys
-
-# services/firecrawl/ живёт на два уровня выше:
-#   __file__  =  .../itch_films/app/film_news.py
-#   dirname × 3  →  .../Project_IT_Career_Hub_2/
-project_root = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-)
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
-from dotenv import load_dotenv
-load_dotenv(os.path.join(project_root, ".env"))
-
+# services/firecrawl/ — собственная копия клиента внутри itch_films,
+# импортируется благодаря sys.path на корень itch_films/ из app/__init__.py.
 from services.firecrawl import FirecrawlClient, FirecrawlError
 
 # Клиент создаётся один раз при первом вызове get_film_news().

@@ -52,6 +52,12 @@
                     {# Подпись #}
                     <div class="gallery-card-body">
                         <p class="gallery-film-title">{{ film.title }}</p>
+                        <button
+                            class="btn btn-news mt-2 w-100"
+                            data-title="{{ film.title }}"
+                            onclick="loadFilmNews(this)">
+                            📖 Подробнее
+                        </button>
                     </div>
 
                 </div>
@@ -70,7 +76,7 @@
         <div class="pagination-nav mt-4">
 
             {% if has_prev %}
-            <a href="{{ url_for('gallery', offset=prev_offset) }}"
+            <a href="{{ url_for('main.gallery', offset=prev_offset) }}"
                class="btn pagination-btn">
                 <i class="bi bi-chevron-left me-1"></i>Предыдущие {{ page_size }}
             </a>
@@ -82,7 +88,7 @@
             </span>
 
             {% if has_next %}
-            <a href="{{ url_for('gallery', offset=next_offset) }}"
+            <a href="{{ url_for('main.gallery', offset=next_offset) }}"
                class="btn pagination-btn ms-auto">
                 Следующие {{ page_size }}<i class="bi bi-chevron-right ms-1"></i>
             </a>

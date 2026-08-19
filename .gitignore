@@ -8,21 +8,18 @@ build/
 
 # Environment & secrets
 .env
-itch_films/local_settings.py
-
-# Flask runtime logs
-itch_films/flask_out.txt
 
 # AI-generated poster files (binary, 2100+ files — tracked separately)
-itch_films/storage/posters/
 itch_films_OOP/storage/posters/
 
 # Generated knowledge graph artifacts
 graphify-out/
 Архивы/
 
-# Diagnostic / one-off scripts (not project code)
-itch_films/scripts/debug/
+# Isolated projects — kept on disk for reference, not version-controlled
+# so they stay fully separate from itch_films_OOP (own sys.path, own
+# templates, no risk of cross-project confusion).
+Project_None/
 
 # Claude Code runtime files
 .claude/scheduled_tasks.lock

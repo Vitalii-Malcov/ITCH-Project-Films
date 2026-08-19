@@ -21,8 +21,10 @@ class SearchStatsRepository:
     def get_popular_searches(self, limit: int = 5) -> list[dict]:
         """
         Топ-N самых популярных запросов через Aggregation Pipeline:
-        $match (без пустых) → $group (считаем count) → $sort → $limit.
-        Возвращает [{"_id": "alien", "count": 7}, ...].
+        $match (без пустых) → $group (считаем count и last_seen) → $sort → $limit.
+        Сортировка: сначала по count (убывание), при равном count —
+        по last_seen (сначала более новый), а не в случайном порядке MongoDB.
+        Возвращает [{"_id": "alien", "count": 7, "last_seen": datetime(...)}, ...].
         """
         collection = self._connection.collection
         if collection is None:
@@ -31,8 +33,12 @@ class SearchStatsRepository:
         try:
             pipeline = [
                 {"$match": {"search_value": {"$ne": ""}}},
-                {"$group": {"_id": "$search_value", "count": {"$sum": 1}}},
-                {"$sort": {"count": -1}},
+                {"$group": {
+                    "_id":       "$search_value",
+                    "count":     {"$sum": 1},
+                    "last_seen": {"$max": "$timestamp"},
+                }},
+                {"$sort": {"count": -1, "last_seen": -1}},
                 {"$limit": limit},
             ]
             return list(collection.aggregate(pipeline))

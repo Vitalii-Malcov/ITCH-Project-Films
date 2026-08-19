@@ -47,13 +47,36 @@ class SearchStatsRepository:
             return []
 
     def get_recent_searches(self, limit: int = 5) -> list[dict]:
-        """N последних поисков — сортировка по timestamp по убыванию."""
+        """
+        N последних УНИКАЛЬНЫХ поисковых запросов — сортировка по timestamp
+        по убыванию. Это только чтение: сама запись в MongoDB (log_search)
+        по-прежнему создаёт отдельный документ на каждый поиск — здесь
+        документы схлопываются по search_value, чтобы повтор одного и
+        того же запроса не занимал несколько слотов в списке "Последние 5",
+        а просто обновлял время последнего вхождения.
+        """
         collection = self._connection.collection
         if collection is None:
             print("[MongoDB Stats] Нет подключения — последние запросы недоступны.")
             return []
         try:
-            return list(collection.find().sort("timestamp", DESCENDING).limit(limit))
+            pipeline = [
+                {"$match": {"search_value": {"$ne": ""}}},
+                # Сортируем ДО группировки — тогда $first внутри каждой
+                # группы гарантированно берёт самый свежий документ.
+                {"$sort": {"timestamp": DESCENDING}},
+                {"$group": {
+                    "_id":           "$search_value",
+                    "search_type":   {"$first": "$search_type"},
+                    "search_value":  {"$first": "$search_value"},
+                    "genre":         {"$first": "$genre"},
+                    "results_count": {"$first": "$results_count"},
+                    "timestamp":     {"$first": "$timestamp"},
+                }},
+                {"$sort": {"timestamp": DESCENDING}},
+                {"$limit": limit},
+            ]
+            return list(collection.aggregate(pipeline))
         except Exception as e:
             print(f"[MongoDB Stats] Ошибка get_recent_searches: {e}")
             return []

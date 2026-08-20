@@ -6,6 +6,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+    {# Иконка вкладки браузера — без неё браузер сам запрашивает
+       /favicon.ico на каждой странице и получает 404 (видно в консоли). #}
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+
     {# Bootstrap 5 CSS — раньше грузился с CDN (cdn.jsdelivr.net), теперь
        файл лежит локально в static/vendor/: не зависим от чужого сервера
        и не тратим лишний DNS/TLS round-trip на сторонний домен. #}

@@ -221,17 +221,42 @@ class FilmRepository:
         rows = self._fetch_all(query, (search_pattern, limit, offset))
         return [self._row_to_movie(row) for row in rows]
 
-    def search_by_genre(self, genre_name: str, year_from: int | None = None,
+    def count_by_title(self, keyword: str) -> int:
+        """
+        Считает ВСЕ фильмы, подходящие под search_by_title (без LIMIT/OFFSET).
+
+        search_by_title() возвращает максимум одну страницу (по умолчанию
+        10 строк) — этого достаточно для карточек, но недостаточно, чтобы
+        показать пользователю реальное "найдено: N", если фильмов больше
+        10. Отдельный COUNT(*) — без JOIN на category, потому что жанр
+        тут ни на что не фильтрует, только раздувал бы запрос.
+        """
+        row = self._fetch_one(
+            "SELECT COUNT(*) FROM film WHERE title LIKE %s",
+            (f"%{keyword}%",),
+        )
+        assert row is not None  # COUNT(*) всегда возвращает одну строку
+        return row[0]
+
+    def search_by_genre(self, genre_names: list[str], year_from: int | None = None,
                          year_to: int | None = None, limit: int = 10, offset: int = 0) -> list[dict]:
         """
-        Ищет фильмы по точному названию жанра, опционально фильтрует
-        по диапазону годов выпуска (year_from/year_to = None → без ограничения).
+        Ищет фильмы, у которых жанр — ЛЮБОЙ ИЗ genre_names (объединение,
+        не пересечение), опционально фильтрует по диапазону годов выпуска
+        (year_from/year_to = None → без ограничения).
+
+        Объединение, а не "фильм должен быть одновременно во всех
+        выбранных жанрах": в Sakila у фильма практически всегда ровно
+        один жанр в film_category, поэтому "пересечение" почти для любой
+        пары жанров дало бы 0 результатов — что бессмысленно для фильтра
+        "показать Action ИЛИ Comedy".
         """
-        # Базовое условие — всегда по жанру; год добавляем только если
-        # передан. conditions содержит только хардкодные фрагменты SQL,
-        # пользовательские значения идут через params (защита от инъекций).
-        conditions = ["c.name = %s"]
-        params     = [genre_name]
+        # c.name IN (...) — сколько бы жанров ни передали, это один
+        # WHERE-фрагмент с нужным числом плейсхолдеров, а не N разных
+        # SQL-запросов. Год добавляем только если передан.
+        placeholders = ", ".join(["%s"] * len(genre_names))
+        conditions   = [f"c.name IN ({placeholders})"]
+        params: list  = list(genre_names)
 
         if year_from is not None:
             conditions.append("f.release_year >= %s")
@@ -243,18 +268,115 @@ class FilmRepository:
         params.extend([limit, offset])
         where_clause = " AND ".join(conditions)
 
+        # GROUP BY + MIN(c.name): при нескольких выбранных жанрах фильм,
+        # подходящий под два из них сразу (например, у него и Action, и
+        # Comedy, и оба выбраны), иначе дал бы JOIN две строки на один
+        # film_id — тот же приём, что и в search_by_title().
         query = f"""
             SELECT f.film_id, f.title, f.release_year, f.rating, f.length,
-                   c.name AS genre, f.description
+                   MIN(c.name) AS genre, f.description
             FROM   film f
             JOIN   film_category fc ON f.film_id      = fc.film_id
             JOIN   category      c  ON fc.category_id = c.category_id
             WHERE  {where_clause}
+            GROUP BY f.film_id, f.title, f.release_year, f.rating, f.length, f.description
             ORDER  BY f.title
             LIMIT  %s OFFSET %s
         """
         rows = self._fetch_all(query, params)
         return [self._row_to_movie(row) for row in rows]
+
+    def count_by_genre(self, genre_names: list[str], year_from: int | None = None,
+                        year_to: int | None = None) -> int:
+        """
+        Считает ВСЕ фильмы, подходящие под search_by_genre (без LIMIT/OFFSET).
+
+        Те же условия WHERE, что и в search_by_genre() — иначе счётчик
+        и реальная выборка могли бы разойтись (например, если кто-то
+        поправит фильтр в одном месте и забудет про другое). COUNT(DISTINCT
+        f.film_id) — при нескольких выбранных жанрах один и тот же фильм
+        мог бы совпасть с двумя из них сразу и посчитаться дважды без DISTINCT.
+        """
+        placeholders = ", ".join(["%s"] * len(genre_names))
+        conditions   = [f"c.name IN ({placeholders})"]
+        params: list  = list(genre_names)
+
+        if year_from is not None:
+            conditions.append("f.release_year >= %s")
+            params.append(year_from)
+        if year_to is not None:
+            conditions.append("f.release_year <= %s")
+            params.append(year_to)
+
+        where_clause = " AND ".join(conditions)
+        query = f"""
+            SELECT COUNT(DISTINCT f.film_id)
+            FROM   film f
+            JOIN   film_category fc ON f.film_id      = fc.film_id
+            JOIN   category      c  ON fc.category_id = c.category_id
+            WHERE  {where_clause}
+        """
+        row = self._fetch_one(query, params)
+        assert row is not None  # COUNT(*) всегда возвращает одну строку
+        return row[0]
+
+    def search_by_year_range(self, year_from: int | None = None, year_to: int | None = None,
+                              limit: int = 10, offset: int = 0) -> list[dict]:
+        """
+        Ищет фильмы только по диапазону годов выпуска, без фильтра по
+        жанру или названию — форма поиска допускает задать "Год от"/"Год
+        до" и не трогать ни жанр, ни строку поиска (year_from/year_to =
+        None означает "без ограничения снизу/сверху", но вызывающий код
+        обязан передать хотя бы одну границу — иначе это была бы выборка
+        всей таблицы film без всякого фильтра).
+        """
+        conditions = []
+        params: list = []
+
+        if year_from is not None:
+            conditions.append("f.release_year >= %s")
+            params.append(year_from)
+        if year_to is not None:
+            conditions.append("f.release_year <= %s")
+            params.append(year_to)
+
+        params.extend([limit, offset])
+        where_clause = " AND ".join(conditions)
+
+        # LEFT JOIN, а не JOIN: фильм без единой записи в film_category
+        # (в стандартной Sakila такого нет, но пусть год всё равно найдёт
+        # его, а не молча выкинет из выборки) всё равно должен попасть
+        # в результат — просто с genre=None.
+        query = f"""
+            SELECT f.film_id, f.title, f.release_year, f.rating, f.length,
+                   MIN(c.name) AS genre, f.description
+            FROM   film f
+            LEFT JOIN film_category fc ON f.film_id      = fc.film_id
+            LEFT JOIN category      c  ON fc.category_id = c.category_id
+            WHERE  {where_clause}
+            GROUP BY f.film_id, f.title, f.release_year, f.rating, f.length, f.description
+            ORDER  BY f.title
+            LIMIT  %s OFFSET %s
+        """
+        rows = self._fetch_all(query, params)
+        return [self._row_to_movie(row) for row in rows]
+
+    def count_by_year_range(self, year_from: int | None = None, year_to: int | None = None) -> int:
+        """Считает ВСЕ фильмы, подходящие под search_by_year_range (без LIMIT/OFFSET)."""
+        conditions = []
+        params: list = []
+
+        if year_from is not None:
+            conditions.append("release_year >= %s")
+            params.append(year_from)
+        if year_to is not None:
+            conditions.append("release_year <= %s")
+            params.append(year_to)
+
+        where_clause = " AND ".join(conditions)
+        row = self._fetch_one(f"SELECT COUNT(*) FROM film WHERE {where_clause}", params)
+        assert row is not None  # COUNT(*) всегда возвращает одну строку
+        return row[0]
 
     def get_film_by_id(self, film_id: int) -> dict | None:
         """Возвращает один фильм по film_id (используется, например, при регенерации постера)."""

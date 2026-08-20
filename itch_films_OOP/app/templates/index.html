@@ -59,17 +59,38 @@
                             </div>
                         </form>
 
-                        {# Жанры: текстовые табы, отделены тонкой линией от формы.
-                           genres передаётся из routes.py через get_all_genres(). #}
+                        {# Жанры: чекбоксы, стилизованные под текстовые табы (визуально
+                           неотличимы от прежних ссылок-таб). genres передаётся из
+                           routes.py через get_all_genres().
+
+                           Раньше это были <a href="/search?genre=..."> — переход по
+                           одной ссылке мог выбрать только ОДИН жанр за раз. Чекбоксы
+                           с одинаковым name="genre" позволяют отметить сразу
+                           несколько — браузер отправит их все как повторяющийся
+                           параметр (?genre=Action&genre=Comedy), routes.py читает это
+                           через request.args.getlist("genre").
+
+                           Сам чекбокс скрыт (visually-hidden), кликабельная область —
+                           <label for="...">: стандартный html-приём, не требует JS для
+                           самого клика. onchange="this.form.submit()" — отправляет
+                           форму сразу при клике, без отдельной кнопки "Применить",
+                           чтобы поведение осталось таким же мгновенным, как раньше
+                           у ссылок. #}
                         {% if genres %}
-                        <div class="genre-filter">
+                        <form action="/search" method="GET" class="genre-filter">
                             {% for g in genres %}
-                            <a
-                                href="/search?genre={{ g.name }}"
-                                class="genre-pill {% if g.name == genre %}active{% endif %}"
-                            >{{ g.name }}</a>
+                            <input
+                                type="checkbox"
+                                class="genre-checkbox visually-hidden"
+                                name="genre"
+                                value="{{ g.name }}"
+                                id="genre-chk-{{ g.id }}"
+                                {% if g.name in selected_genres %}checked{% endif %}
+                                onchange="this.form.submit()"
+                            >
+                            <label for="genre-chk-{{ g.id }}" class="genre-pill">{{ g.name }}</label>
                             {% endfor %}
-                        </div>
+                        </form>
                         {% endif %}
 
                         {# ── Пробел 1: поиск по жанру + диапазон годов ────────── #}
@@ -86,7 +107,7 @@
                                             <option value="">— выберите —</option>
                                             {% for g in genres %}
                                             <option value="{{ g.name }}"
-                                                {% if g.name == genre %}selected{% endif %}>
+                                                {% if g.name in selected_genres %}selected{% endif %}>
                                                 {{ g.name }}
                                             </option>
                                             {% endfor %}
@@ -158,16 +179,40 @@
         {% if movies is not none %}
         <div class="results-panel">
 
-            {% if movies %}
+            {% if empty_search %}
+
+                {# Пользователь нажал "Найти", ничего не введя (или только
+                   пробелы) и не отметив жанр — routes.py: empty_search=True.
+                   Такой поиск НЕ попадает в статистику MongoDB (нет смысла
+                   считать "пустой запрос" популярным), но пользователь
+                   должен увидеть явную причину, а не тишину. #}
+                <div class="no-results">
+                    <div class="no-results-icon">🔎</div>
+                    <h5>Пустой запрос</h5>
+                    <p>Введите название фильма или выберите хотя бы один жанр.</p>
+                </div>
+
+            {% elif movies %}
 
                 {# Заголовок результатов внутри glass-панели #}
                 <p class="results-count">
-                    {% if genre %}
-                        Жанр: <strong>{{ genre }}</strong> —
+                    {% if selected_genres %}
+                        {# Один жанр — "Жанр: Action", несколько — "Жанры: Action, Comedy". #}
+                        {{ 'Жанр' if selected_genres | length == 1 else 'Жанры' }}:
+                        <strong>{{ selected_genres | join(', ') }}</strong> —
                     {% elif query %}
                         По запросу <strong>"{{ query }}"</strong> —
+                    {% elif year_from or year_to %}
+                        {# Только диапазон годов, без жанра/названия — например,
+                           "от" заполнили, "до" оставили пустым. #}
+                        Годы:
+                        <strong>{{ year_from or year_range.min_year }}–{{ year_to or year_range.max_year }}</strong> —
                     {% endif %}
-                    найдено фильмов: <strong>{{ movies | length }}</strong>
+                    {# total_count — реальное число в базе (routes.py: count_by_title/
+                       count_by_genre), а не movies|length — тот показывал бы максимум
+                       10 (размер страницы), даже если совпадений в базе больше. #}
+                    найдено {{ total_count | plural_ru('фильм', 'фильма', 'фильмов') }}:
+                    <strong>{{ total_count }}</strong>
                 </p>
 
                 <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-4">
@@ -243,13 +288,17 @@
                 <div class="pagination-nav">
                     {% if offset > 0 %}
                     {% set prev_offset = (offset - 10) if offset >= 10 else 0 %}
-                    <a href="{{ url_for('main.search', q=query, genre=genre, year_from=year_from, year_to=year_to, offset=prev_offset) }}"
+                    {# genre=selected_genres — список, а не строка: url_for
+                       повторяет параметр для каждого жанра (?genre=A&genre=B),
+                       иначе при листании страниц "вперёд"/"назад" остался бы
+                       только один из выбранных жанров. #}
+                    <a href="{{ url_for('main.search', q=query, genre=selected_genres, year_from=year_from, year_to=year_to, offset=prev_offset) }}"
                        class="btn pagination-btn">
                         <i class="bi bi-chevron-left me-1"></i>Предыдущие 10
                     </a>
                     {% endif %}
                     {% if movies|length == 10 %}
-                    <a href="{{ url_for('main.search', q=query, genre=genre, year_from=year_from, year_to=year_to, offset=offset + 10) }}"
+                    <a href="{{ url_for('main.search', q=query, genre=selected_genres, year_from=year_from, year_to=year_to, offset=offset + 10) }}"
                        class="btn pagination-btn ms-auto">
                         Следующие 10<i class="bi bi-chevron-right ms-1"></i>
                     </a>
@@ -257,16 +306,35 @@
                 </div>
                 {% endif %}
 
+            {% elif cyrillic_query %}
+
+                {# Sakila — англоязычная база, поиск на кириллице никогда
+                   ничего не найдёт (не "фильм не нашёлся", а неправильный
+                   алфавит) — routes.py даже не ходил в БД за этим запросом
+                   (cyrillic_query проверяется до похода в MySQL) и не
+                   логировал его в статистику. #}
+                <div class="no-results">
+                    <div class="no-results-icon">🔤</div>
+                    <h5>Введите название на английском</h5>
+                    <p>
+                        База данных Sakila содержит только англоязычные названия —
+                        попробуйте латиницей, например <strong>ace</strong> или <strong>love</strong>.
+                    </p>
+                </div>
+
             {% else %}
 
                 <div class="no-results">
                     <div class="no-results-icon">🎬</div>
                     <h5>Ничего не найдено</h5>
                     <p>
-                        {% if genre %}
-                            В жанре <strong>"{{ genre }}"</strong> фильмов не найдено.
-                        {% else %}
+                        {% if selected_genres %}
+                            В жанре{{ 'ах' if selected_genres | length > 1 else '' }}
+                            <strong>"{{ selected_genres | join(', ') }}"</strong> фильмов не найдено.
+                        {% elif query %}
                             По запросу <strong>"{{ query }}"</strong> фильмов не найдено.
+                        {% else %}
+                            За <strong>{{ year_from or year_range.min_year }}–{{ year_to or year_range.max_year }}</strong> годы фильмов не найдено.
                         {% endif %}
                     </p>
                 </div>

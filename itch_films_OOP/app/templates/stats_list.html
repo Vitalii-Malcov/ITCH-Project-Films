@@ -59,6 +59,10 @@
                                 <span class="badge recent-type-badge recent-badge-genre">
                                     🎭 Genre
                                 </span>
+                                {% elif item.search_type == "year" %}
+                                <span class="badge recent-type-badge recent-badge-year">
+                                    📅 Year
+                                </span>
                                 {% else %}
                                 <span class="text-secondary">—</span>
                                 {% endif %}

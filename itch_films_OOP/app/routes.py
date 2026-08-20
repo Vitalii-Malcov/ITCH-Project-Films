@@ -13,6 +13,7 @@
 
 import logging
 import os
+import re
 import sys
 
 # Этот файл предназначен для импорта через create_app() (app/__init__.py),
@@ -107,6 +108,22 @@ film_news_service   = FilmNewsService()
 poster_enricher     = PosterEnricher(DEFAULT_POSTER, poster_repository=PosterRepository())
 
 
+_CYRILLIC_RE = re.compile(r'[а-яёА-ЯЁ]')
+
+
+def _contains_cyrillic(text: str) -> bool:
+    """
+    True, если в строке есть хотя бы одна кириллическая буква.
+
+    Sakila — англоязычная база (все названия фильмов на английском),
+    поэтому запрос на кириллице ГАРАНТИРОВАННО не найдёт совпадений по
+    LIKE — это не "фильм не нашёлся", а "неправильный алфавит". Отдельная
+    проверка позволяет сразу сказать пользователю правду, вместо похода
+    в MySQL за заведомо пустым результатом и обычного "ничего не найдено".
+    """
+    return bool(_CYRILLIC_RE.search(text))
+
+
 def _parse_year(value: str):
     """
     Проверяет строку года из формы поиска.
@@ -166,7 +183,7 @@ def home():
     genres, year_range = _get_search_form_context()
 
     return render_template("index.html",
-                           movies=None, query="", genre="",
+                           movies=None, query="", selected_genres=[],
                            year_from="", year_to="", offset=0,
                            genres=genres, year_range=year_range,
                            default_image=DEFAULT_POSTER, db_error=None)
@@ -174,8 +191,12 @@ def home():
 
 @bp.route("/search")
 def search():
-    query     = request.args.get("q",         "").strip()
-    genre     = request.args.get("genre",     "").strip()
+    query     = request.args.get("q", "").strip()
+    # getlist(), а не get(): жанровые "таблетки" на странице теперь чекбоксы
+    # с одинаковым name="genre" — при отметке нескольких браузер отправляет
+    # ?genre=Action&genre=Comedy, и getlist() возвращает их все, а не только
+    # первый (как сделал бы обычный get()).
+    selected_genres = [g.strip() for g in request.args.getlist("genre") if g.strip()]
     year_from = request.args.get("year_from", "").strip()
     year_to   = request.args.get("year_to",   "").strip()
 
@@ -184,8 +205,29 @@ def search():
     except ValueError:
         offset = 0
 
-    movies   = None
-    db_error = None
+    movies       = None
+    db_error     = None
+    # empty_search — пользователь нажал "Найти", ничего не введя (или
+    # только пробелы: query уже "" после .strip() выше) и не отметив ни
+    # одного жанра. Раньше в этом случае movies оставался None и секция
+    # результатов молча не рендерилась вообще — пользователь жал кнопку
+    # и не видел никакой реакции. Явный флаг вместо этого показывает
+    # понятное сообщение (см. index.html) и, что важно, НЕ уходит в
+    # search_logger ниже — пустой запрос не несёт статистической ценности
+    # и только раздувал бы "Всего поисков"/"Уникальных запросов" на /stats.
+    empty_search = False
+    # cyrillic_query — в строке поиска есть кириллица. Sakila целиком на
+    # английском, так что LIKE '%ромашка%' по определению не найдёт ни
+    # одного фильма — это не "фильм не нашёлся", а неправильный алфавит.
+    # Проверяем ДО похода в БД: не тратим запрос на заведомо пустой
+    # результат и показываем пользователю честную причину (см. index.html),
+    # а не общее "ничего не найдено".
+    cyrillic_query = bool(query) and _contains_cyrillic(query)
+    # total_count — реальное число фильмов в базе под этот фильтр (без
+    # LIMIT). movies содержит максимум одну страницу (10 штук), поэтому
+    # "найдено: {{ movies|length }}" в шаблоне враньё, если совпадений
+    # больше 10 — считаем отдельным COUNT(*)-запросом ниже.
+    total_count = 0
 
     # ── Проверяем годы ДО похода в базу: "от" и "до" должны быть числами
     # в диапазоне YEAR_MIN..YEAR_MAX, иначе поиск не выполняется вообще.
@@ -194,36 +236,102 @@ def search():
         yt, year_error = _parse_year(year_to)
     else:
         yt = None
+    # "Год от" больше "Год до" (например, от=2026, до=2025) — не ошибка
+    # пользователя, а просто перепутанные местами значения. Меняем местами
+    # и yf/yt (идут в SQL-запрос), и year_from/year_to (строки для полей
+    # формы и пагинации) — иначе форма показала бы старый, неверный
+    # порядок, а искало бы по новому.
     if not year_error and yf is not None and yt is not None and yf > yt:
-        year_error = '«Год от» не может быть больше «Год до».'
+        yf, yt = yt, yf
+        year_from, year_to = year_to, year_from
+
+    # Диапазон годов задан ("Год от"/"Год до"), если хоть одна граница
+    # прошла _parse_year выше — пустая строка в поле даёт None и не
+    # считается заданной границей (см. _parse_year: пустая строка это
+    # "фильтр не применяется", а не ошибка).
+    year_range_given = yf is not None or yt is not None
 
     if year_error:
         movies = []
+    elif not query and not selected_genres and not year_range_given:
+        empty_search = True
+        movies = []
     else:
+        # Стартуем с [] (не None): если ни одна ветка ниже не подойдёт —
+        # например, cyrillic_query=True и жанр не выбран, значит title-
+        # поиск пропущен, а под genre/year-only условия тоже не подпадает —
+        # movies обязан остаться пустым списком, а не тихо повиснуть на
+        # None (иначе `{% if movies is not none %}` в шаблоне решит, что
+        # поиска вообще не было, и не отрисует даже сообщение об этом).
+        movies = []
         try:
-            if query:
+            if query and not cyrillic_query:
                 movies = film_repository.search_by_title(query, offset=offset)
+                total_count = film_repository.count_by_title(query)
 
-            if not movies and genre:
-                movies = film_repository.search_by_genre(genre,
+            if not movies and selected_genres:
+                movies = film_repository.search_by_genre(selected_genres,
                                                           year_from=yf, year_to=yt,
                                                           offset=offset)
+                total_count = film_repository.count_by_genre(selected_genres,
+                                                              year_from=yf, year_to=yt)
+
+            # Только годы, без названия и без жанра — например, "Год от"
+            # заполнили, а жанр оставили "— выберите —". search_by_genre()
+            # выше не подходит: он всегда требует хотя бы один жанр.
+            if not movies and not query and not selected_genres and year_range_given:
+                movies = film_repository.search_by_year_range(yf, yt, offset=offset)
+                total_count = film_repository.count_by_year_range(yf, yt)
         except Exception:
-            logger.exception("search: ошибка при поиске (query=%r, genre=%r)", query, genre)
+            logger.exception("search: ошибка при поиске (query=%r, genres=%r)", query, selected_genres)
             db_error = ("База данных временно недоступна. "
                         "Попробуйте позже.")
             movies = []
+            total_count = 0
 
     # ── Логируем поиск в MongoDB (некорректные годы не логируем) ──
-    results_count = len(movies) if movies else 0
-    if year_error:
+    # total_count, а не len(movies) — та же причина: MongoDB должна
+    # хранить реальное число найденных фильмов, а не размер одной страницы.
+    results_count = total_count
+    genre_label = ", ".join(selected_genres)
+    # offset == 0 — логируем только первую страницу. Клик "Следующие 10"
+    # ведёт на тот же /search с тем же query/genre, только offset больше —
+    # это ПРОДОЛЖЕНИЕ того же поиска, а не новый поиск. Без этой проверки
+    # поиск на 701 фильм по "r" (71 страница) отправил бы в MongoDB 71
+    # отдельную запись за один и тот же запрос — "Всего поисков" и
+    # популярность росли бы при обычном пролистывании страниц.
+    if year_error or offset != 0 or cyrillic_query:
+        # cyrillic_query — запрос на кириллице не несёт статистической
+        # ценности (это гарантированно 0 совпадений из-за алфавита, а не
+        # реальный неудачный поиск) — не засоряем "Всего поисков" и
+        # "Уникальных запросов" на /stats заведомо нерабочими запросами.
         pass
     elif query:
-        search_logger.log_search(search_type="title", search_value=query,
+        # .lower() — только для статистики: MySQL и так ищет
+        # регистронезависимо (LOVE/love/LoVe находят одинаковые фильмы),
+        # но MongoDB группирует /stats по точной строке search_value —
+        # без .lower() "LOVE" и "love" считались бы двумя РАЗНЫМИ
+        # запросами (раздували "уникальных запросов" и делили счётчик
+        # популярности пополам). Сама query (для поиска, строки
+        # результатов, пагинации) остаётся как ввёл пользователь —
+        # normalize только то, что уходит в лог.
+        search_logger.log_search(search_type="title", search_value=query.lower(),
                                  results_count=results_count)
-    elif genre:
-        search_logger.log_search(search_type="genre", search_value=genre,
-                                 genre=genre, year_from=year_from, year_to=year_to,
+    elif selected_genres:
+        search_logger.log_search(search_type="genre", search_value=genre_label,
+                                 genre=genre_label, year_from=year_from, year_to=year_to,
+                                 results_count=results_count)
+    elif year_range_given:
+        # Обе границы могли быть заданы, только одна ("от" или "до") —
+        # search_value должен быть понятным в любом из трёх случаев.
+        if year_from and year_to:
+            year_label = f"{year_from}–{year_to}"
+        elif year_from:
+            year_label = f"от {year_from}"
+        else:
+            year_label = f"до {year_to}"
+        search_logger.log_search(search_type="year", search_value=year_label,
+                                 year_from=year_from, year_to=year_to,
                                  results_count=results_count)
 
     # ── Добавляем постеры из movie_posters (write DB) ─────────────
@@ -233,11 +341,12 @@ def search():
     genres, year_range = _get_search_form_context()
 
     return render_template("index.html",
-                           movies=movies, query=query, genre=genre,
+                           movies=movies, query=query, selected_genres=selected_genres,
                            year_from=year_from, year_to=year_to,
                            offset=offset, genres=genres,
-                           year_range=year_range,
-                           default_image=DEFAULT_POSTER,
+                           year_range=year_range, total_count=total_count,
+                           default_image=DEFAULT_POSTER, empty_search=empty_search,
+                           cyrillic_query=cyrillic_query,
                            db_error=db_error, year_error=year_error)
 
 

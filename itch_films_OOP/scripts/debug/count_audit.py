@@ -1,13 +1,32 @@
 """
 scripts/debug/count_audit.py
-Read-only audit: counts films in Sakila, valid OpenAI posters, disk files.
-Run from project root:
+Разовый диагностический скрипт (только чтение): считает фильмы в Sakila,
+валидные OpenAI-постеры и файлы на диске, ищет расхождения между ними.
+
+Это средний по подробности из трёх debug-скриптов проекта:
+    - queue_status.py  — беглый взгляд (пара чисел, для быстрой проверки)
+    - count_audit.py   — этот файл: сводный отчёт по всем таблицам сразу,
+                          заканчивается конкретным списком "что осталось
+                          сгенерировать"
+    - audit_posters.py — построчный разбор конкретных проблемных записей,
+                          когда сводки здесь недостаточно
+
+Главный практический результат — секция "## Итог": сколько фильмов Sakila
+ещё НЕ имеют валидного AI-постера. Это тот же список, что скормит себе
+scripts/generate_movie_posters.py --target-from-db, поэтому удобно
+прогнать этот скрипт перед батчем генерации, чтобы понимать масштаб
+работы и заранее заметить расхождения (дубли, битые файлы), которые
+могут исказить подсчёт.
+
+Запуск из корня проекта:
     python scripts/debug/count_audit.py
 """
 
 import os
 import sys
 
+# Скрипт лежит в itch_films_OOP/scripts/debug/, поэтому корень проекта —
+# на два уровня выше (scripts/debug/ → scripts/ → корень).
 _script_dir = os.path.dirname(os.path.abspath(__file__))
 _itch_films = os.path.normpath(os.path.join(_script_dir, '..', '..'))
 
@@ -15,6 +34,8 @@ if _itch_films in sys.path:
     sys.path.remove(_itch_films)
 sys.path.insert(0, _itch_films)
 
+# Принудительно UTF-8 на Windows (консоль по умолчанию — cp1252,
+# в неё не помещаются русские буквы из print() ниже).
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 from dotenv import load_dotenv
@@ -28,7 +49,19 @@ LINE = '=' * 60
 
 
 def run():
-    # ── 1. Sakila film counts ──────────────────────────────────────
+    """
+    Собирает и печатает отчёт о состоянии Sakila, movie_posters и файлов
+    на диске.
+
+    Структура: сначала три отдельных подключения к БД (Sakila read-only,
+    write-база, снова write-база для файлов) собирают все нужные цифры
+    в обычные переменные Python, и только в самом конце — единый блок
+    print(), который форматирует уже готовые данные. Курсоры/соединения
+    закрываются сразу после использования (а не держатся все функции) —
+    чтобы не занимать соединения из пула дольше, чем нужно для разового
+    диагностического запуска.
+    """
+    # ── 1. Подсчёты фильмов в Sakila (read-only, dbconfig) ────────────
     conn_r  = mysql.connector.connect(**local_settings.dbconfig)
     cur_r   = conn_r.cursor()
 
@@ -41,7 +74,11 @@ def run():
     cur_r.execute("SELECT MIN(film_id), MAX(film_id) FROM film")
     min_id, max_id = cur_r.fetchone()
 
-    # Check gaps in sequence
+    # Sakila не гарантирует, что film_id идёт подряд без единого пропуска
+    # (строки могли быть удалены). Чтобы дальше честно посчитать "какие
+    # фильмы уже имеют постер", нужен ТОЧНЫЙ набор существующих id
+    # (actual_set), а не просто диапазон min..max — иначе несуществующие
+    # id тоже попали бы в список "надо сгенерировать".
     cur_r.execute("SELECT film_id FROM film ORDER BY film_id")
     all_sakila_ids = [row[0] for row in cur_r.fetchall()]
     expected_range = set(range(min_id, max_id + 1))
@@ -51,7 +88,7 @@ def run():
     cur_r.close()
     conn_r.close()
 
-    # ── 2. movie_posters counts ────────────────────────────────────
+    # ── 2. Подсчёты movie_posters (write-база, dbconfig_write) ────────
     conn_w = mysql.connector.connect(**local_settings.dbconfig_write)
     cur_w  = conn_w.cursor()
 
@@ -73,7 +110,11 @@ def run():
             "WHERE provider = 'openai' AND status = 'completed'"
         )
         openai_rows = cur_w.fetchall()
-        # Build set of film_ids with VALID file on disk
+        # "completed" в БД — это ещё не гарантия, что файл реально есть и
+        # не пустой: запись могла остаться от старой генерации, а файл —
+        # быть удалён вручную или перезаписан пустым при сбое. Поэтому
+        # валидным считаем только то, что прошло ОБЕ проверки: запись
+        # в БД + реальный файл на диске размером > 0 байт.
         valid_openai_ids = set()
         missing_files    = []
         for film_id, image_path in openai_rows:
@@ -82,7 +123,10 @@ def run():
             else:
                 missing_files.append((film_id, image_path))
 
-        # Records in movie_posters whose file is missing
+        # Та же проверка "файл реально существует", но для ВСЕХ completed-
+        # записей (не только provider='openai') — включает и mock-постеры.
+        # Нужна отдельно от missing_files выше, потому что missing_files
+        # смотрит только на openai, а тут — на любую завершённую запись.
         cur_w.execute(
             "SELECT film_id, image_path FROM movie_posters "
             "WHERE status = 'completed'"
@@ -93,7 +137,9 @@ def run():
             if not ip or not os.path.isfile(ip) or os.path.getsize(ip) == 0
         ]
 
-        # queue stats
+        # Сколько элементов очереди генерации в каждом статусе — просто
+        # для сводки в блоке вывода ниже (сама очередь подробно
+        # разбирается в audit_posters.py, здесь только счётчики).
         try:
             cur_w.execute(
                 "SELECT status, COUNT(*) FROM movie_generation_queue GROUP BY status"
@@ -102,7 +148,10 @@ def run():
         except Exception:
             queue_stats = {}
 
-        # film_ids in queue not in Sakila
+        # film_id в очереди, которых НЕТ в Sakila вообще — такого быть не
+        # должно (очередь строится из списка фильмов Sakila), но если
+        # кто-то руками добавил строку в movie_generation_queue с опечаткой
+        # в film_id, эта проверка её найдёт.
         try:
             cur_w.execute("SELECT film_id FROM movie_generation_queue")
             queue_ids = {row[0] for row in cur_w.fetchall()}
@@ -110,7 +159,9 @@ def run():
         except Exception:
             orphan_queue = []
 
-        # duplicate film_ids in movie_posters
+        # Сколько film_id имеют больше одной записи в movie_posters —
+        # ожидаемо (история версий: mock → openai, повторные попытки
+        # после сбоя), просто для масштаба картины в отчёте.
         cur_w.execute(
             "SELECT film_id, COUNT(*) AS cnt FROM movie_posters "
             "GROUP BY film_id HAVING cnt > 1"
@@ -118,6 +169,10 @@ def run():
         duplicates = cur_w.fetchall()
 
     except mysql.connector.Error as e:
+        # Если что-то из запросов выше упало (например, таблицы ещё не
+        # созданы на свежей копии базы) — печатаем ошибку и выходим, а не
+        # падаем трассировкой: это диагностический скрипт для человека,
+        # а не часть сайта.
         print(f"[DB ERROR] {e}")
         cur_w.close()
         conn_w.close()
@@ -126,7 +181,7 @@ def run():
     cur_w.close()
     conn_w.close()
 
-    # ── 3. Disk files ──────────────────────────────────────────────
+    # ── 3. Файлы на диске (storage/posters/) ───────────────────────────
     if os.path.isdir(STORAGE_DIR):
         all_disk_files = [
             f for f in os.listdir(STORAGE_DIR)
@@ -140,7 +195,11 @@ def run():
         disk_count = 0
         disk_full_paths = set()
 
-    # Files on disk without a DB record
+    # Файлы, которые физически лежат в storage/posters/, но ни одна строка
+    # в movie_posters на них не ссылается — "мусор", оставшийся, например,
+    # от прерванной генерации (файл записался, а INSERT в БД не прошёл).
+    # Отдельное новое подключение к БД — специально для этой узкой сверки
+    # путей, чтобы не тащить весь предыдущий курсор через блок файлов.
     cur_w2 = None
     orphan_files = []
     try:
@@ -154,10 +213,14 @@ def run():
     except Exception:
         pass
 
-    # ── 4. Missing Sakila films (need a card) ──────────────────────
+    # ── 4. Фильмы Sakila без валидной карточки (нужно сгенерировать) ───
+    # Это и есть главный практический вывод скрипта: множество film_id из
+    # Sakila МИНУС те, что уже имеют проверенный (файл существует и не
+    # пустой) OpenAI-постер. Именно этот остаток нужно будет прогнать
+    # через scripts/generate_movie_posters.py.
     needs_card = sorted(actual_set - valid_openai_ids)
 
-    # ── Output ────────────────────────────────────────────────────
+    # ── Вывод отчёта ──────────────────────────────────────────────────
     print(LINE)
     print("  ITCH Films — Audit Report (read-only)")
     print(LINE)

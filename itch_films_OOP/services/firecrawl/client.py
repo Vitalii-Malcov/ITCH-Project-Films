@@ -13,7 +13,9 @@ from .exceptions import (
 )
 from .models import CrawlResult, FirecrawlResult, SearchResult
 
-logger = logging.getLogger(__name__)
+# "network" — этот файл целиком про HTTP-вызовы к внешнему API
+# Firecrawl (см. logging_setup.py: logs/network.log).
+logger = logging.getLogger("network")
 
 
 class FirecrawlClient:

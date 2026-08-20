@@ -32,7 +32,8 @@ import mysql.connector
 
 from services.ai_posters.exceptions import RepositoryError
 
-logger = logging.getLogger(__name__)
+# "database" — movie_generation_queue живёт в MySQL write-БД.
+logger = logging.getLogger("database")
 
 # ── Настройка sys.path ────────────────────────────────────────────────────
 # dirname × 3 от __file__ — это корень itch_films_OOP/ (services/ai_posters/

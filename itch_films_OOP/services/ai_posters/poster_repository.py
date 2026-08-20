@@ -31,7 +31,8 @@ from mysql.connector.connection import MySQLConnection
 
 from services.ai_posters.exceptions import RepositoryError
 
-logger = logging.getLogger(__name__)
+# "database" — вся работа этого файла — MySQL write-БД (movie_posters).
+logger = logging.getLogger("database")
 
 # ── sys.path: находим itch_films_OOP/local_settings.py ────────────────
 # __file__ → .../itch_films_OOP/services/ai_posters/poster_repository.py

@@ -33,7 +33,8 @@ from services.ai_posters.exceptions import (
 )
 from services.ai_posters.providers.base import AIImageProvider
 
-logger = logging.getLogger(__name__)
+# "network" — этот файл вызывает внешний API OpenAI по HTTP.
+logger = logging.getLogger("network")
 
 # ── Значения по умолчанию — единый источник истины ────────────────────────────
 DEFAULT_MODEL       = "gpt-image-2"

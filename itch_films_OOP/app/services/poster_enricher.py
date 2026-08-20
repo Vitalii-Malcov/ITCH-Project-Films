@@ -9,7 +9,9 @@
 
 import logging
 
-logger = logging.getLogger(__name__)
+# "database" — единственная ошибка, которую тут ловят, это сбой
+# PosterRepository (MySQL write-БД) в enrich() ниже.
+logger = logging.getLogger("database")
 
 
 class PosterEnricher:

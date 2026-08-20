@@ -13,7 +13,9 @@ import sys
 from pymongo import MongoClient
 from pymongo.collection import Collection
 
-logger = logging.getLogger(__name__)
+# "database" — MongoDB тоже база данных (см. logging_setup.py:
+# logs/database.log собирает и MySQL, и MongoDB).
+logger = logging.getLogger("database")
 
 # Некоторые консоли Windows используют однобайтовую кодировку (например
 # cp1252), в которую не помещаются русские буквы из print() ниже. Без

@@ -26,7 +26,9 @@ import logging
 
 from services.ai_posters.exceptions import StorageError
 
-logger = logging.getLogger(__name__)
+# "app" — этот файл про файлы на диске (storage/posters/), не про
+# БД и не про сеть.
+logger = logging.getLogger("app")
 
 _EXTENSION = '.webp'
 _DIGITS = 6  # 000001.webp … 999999.webp

@@ -43,7 +43,10 @@ from app.services import (
 )
 from services.ai_posters import PosterRepository
 
-logger = logging.getLogger(__name__)
+# "database" — все except-блоки в этом файле оборачивают вызовы
+# film_repository (MySQL) — логично складывать их в logs/database.log,
+# а не в общий файл (см. logging_setup.py).
+logger = logging.getLogger("database")
 
 # Blueprint вместо прямого `@bp.route(...)` на глобальном объекте app —
 # так routes.py больше не зависит от того, что app уже создан на уровне

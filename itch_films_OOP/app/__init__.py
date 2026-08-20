@@ -39,6 +39,7 @@ sys.path.insert(0, _project_root)
 from flask import Flask   # импортируем класс Flask из библиотеки flask
 from dotenv import load_dotenv
 import local_settings     # импортируем наши настройки
+from logging_setup import setup_logging
 
 from app.filters import plural_ru
 
@@ -54,6 +55,12 @@ def create_app(config: dict | None = None) -> Flask:
     """
     # .env из itch_films_OOP/ — там лежат ключи OpenAI и Firecrawl.
     load_dotenv(os.path.join(_project_root, ".env"))
+
+    # До импорта routes.py (строка ниже) — модули вроде app.routes,
+    # app.services.mongo_connection и т.д. на уровне файла делают
+    # logging.getLogger("database")/("network")/("app"), и им уже нужны
+    # готовые обработчики файлов в logs/.
+    setup_logging()
 
     # Создаём Flask-приложение.
     # __name__ говорит Flask: "ищи шаблоны и статику

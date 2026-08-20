@@ -34,7 +34,10 @@ from services.ai_posters.poster_repository import PosterRepository
 from services.ai_posters.prompt_builder import build_prompt
 from services.ai_posters.exceptions import PosterError
 
-logger = logging.getLogger(__name__)
+# "app" — этот файл оркестрирует provider (сеть) + storage (диск) +
+# repository (БД) сразу, ошибки здесь смешанные — не подходят ни под
+# "database", ни под "network" целиком (см. logging_setup.py).
+logger = logging.getLogger("app")
 
 # Размеры постера по умолчанию — портретная ориентация, типичная для постеров фильмов
 DEFAULT_WIDTH  = 640

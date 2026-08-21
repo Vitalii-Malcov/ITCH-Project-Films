@@ -1,5 +1,7 @@
 # ITCH Films Premium — OOP-версия
 
+[![ITCH Films OOP CI](https://github.com/Vitalii-Malcov/ITCH-Project-Films/actions/workflows/itch-films-oop-ci.yml/badge.svg)](https://github.com/Vitalii-Malcov/ITCH-Project-Films/actions/workflows/itch-films-oop-ci.yml)
+
 Курсовой проект — премиальный каталог фильмов на Flask + MySQL (Sakila) + MongoDB,
 с AI-генерируемыми постерами (OpenAI Images API).
 

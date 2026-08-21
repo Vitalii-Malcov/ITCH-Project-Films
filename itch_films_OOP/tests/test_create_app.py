@@ -46,8 +46,16 @@ def mock_repository(monkeypatch):
                              {"title": "Test Film", "genre": "Action",
                               "year": 2010, "film_id": 1}
                          ])
+    monkeypatch.setattr(routes_module.film_repository, "count_by_title",
+                         lambda *a, **kw: 1)
     monkeypatch.setattr(routes_module.film_repository, "search_by_genre",
                          lambda *a, **kw: [])
+    monkeypatch.setattr(routes_module.film_repository, "count_by_genre",
+                         lambda *a, **kw: 0)
+    monkeypatch.setattr(routes_module.film_repository, "search_by_year_range",
+                         lambda *a, **kw: [])
+    monkeypatch.setattr(routes_module.film_repository, "count_by_year_range",
+                         lambda *a, **kw: 0)
     monkeypatch.setattr(routes_module.film_repository, "get_all_films",
                          lambda *a, **kw: [])
     monkeypatch.setattr(routes_module.film_repository, "get_total_films",
